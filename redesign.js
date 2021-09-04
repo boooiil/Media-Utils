@@ -215,8 +215,7 @@ function main() {
 
 		fs.stat(file, (err, stat) => {
 
-			if (stat.isFile && file.includes(".mkv")) {
-
+			if (stat.isFile && (file.includes(".mkv") || file.includes(".avi"))) {
 
 				let name = rename(file)
 
@@ -225,15 +224,15 @@ function main() {
 				let object = {
 					activity: "Waiting",
 					file: {
-						name: name.rename,
-						name_mod: name.rename.replace(".mkv", ""),
-						name_new: name.rename.replace(".mkv", ".mp4"),
-						ext: ".mkv",
+						name: name.name_with_ext,
+						name_mod: name.name_without_ext,
+						name_new: name.name_without_ext + ".mp4",
+						ext: name.ext,
 						size: stat.size,
 						new_size: null,
 						val_size: null,
-						path: o.settings.working + "/" + name.rename,
-						path_new: o.settings.working + "/" + name.rename.replace(".mkv", ".mp4"),
+						path: o.settings.working + "/" + name.name_with_ext,
+						path_new: o.settings.working + "/" + name.name_without_ext + ".mp4",
 						series: name.series,
 						episode: name.episode
 					}
@@ -252,7 +251,7 @@ function main() {
 					console.log(debug_prefix, chalk.blue("Episode:"), chalk.gray(object.file.episode))
 
 				}
-				if (name.rename != file) fs.renameSync(`./${file}`, name.rename)
+				if (name.name_with_ext != file) fs.renameSync(`./${file}`, name.name_with_ext)
 
 				o.files.push(object)
 
@@ -269,9 +268,9 @@ function main() {
 
 						let name = rename(file1)
 
-						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(name.rename))
+						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(name.name_with_ext))
 
-						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.rename)
+						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.name_with_ext)
 
 					}
 
@@ -279,9 +278,9 @@ function main() {
 
 						let name = rename(file1)
 
-						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(name.rename))
+						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(name.name_with_ext))
 
-						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.rename.replace(name.ext, "") + ".en" + name.ext)
+						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.name_with_ext.replace(name.ext, "") + ".en" + name.ext)
 
 					}
 
@@ -906,7 +905,8 @@ function rename(input) {
 	//console.log(input)
 
 	let output = {
-		rename: null,
+		name_with_ext: null,
+		name_without_ext: null,
 		ext: null,
 		show: null,
 		series: null,
@@ -914,10 +914,24 @@ function rename(input) {
 		season: null,
 		episode: []
 	}
+	// s\d{2})    				 	- Matches s00			  (s and any 2 numbers)
+	// (e|-e|.e)([0-9]+)	     	- Matches e00			  (e variant and any number)
+	// (s\d{2})((e|-e|.e)([0-9]+))+ - Matches s00e00 variants (s, any 2 numbers, e variant, and any number)
 
-	if (/((s[0-9]+)((e[0-9]+)+|(.e[0-9]+)+))((-e[0-9]+)+)?/ig.test(input)) {
+	// \d{2}						- Matches 00    		  (any 2 numbers)
+	// (x([0-9]+))					- Matches x00   		  (x and any number)
+	// \d{2}(x([0-9]+))+			- Matches 00x00 		  (any 2 numbers, x, and any number)
 
-		output.season = input.match(/((s[0-9]+)((e[0-9]+)+|(.e[0-9]+)+))((-e[0-9]+)+)?/ig, '')[0]
+	if (/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig.test(input)) {
+
+		output.season = input.match(/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig)[0]
+
+		if (/\d{2}(x([0-9]+))+/.test(output.season)) {
+
+			output.season = output.season.replace(/x/ig, 'e')
+			output.season = "s" + output.season
+
+		}
 
 		output.season = output.season.replace(/\.|-/g, '')
 		output.season = output.season.replace(/s/ig, 's')
@@ -935,16 +949,23 @@ function rename(input) {
 
 		})
 
+		output.show = input.replace(/\./g, ' ').match(/(.*)(?=(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+)/g, '')[0]
+		output.show = output.show.replace(/\[/g, '').trim()
+		output.show = output.show.replace(/-/g, '').trim()
+		
+		output.ext = input.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
 
-		output.show = input.replace(/\./g, ' ').match(/(.*?)(?=[S-s][0-9])/g, '')[0].replace(/-/g, '').trim()
+		output.name_with_ext = `${output.show.replace('-', '')} - ${output.built}${output.ext}`
+		output.name_without_ext = `${output.show.replace('-', '')} - ${output.built}`
 
-		output.ext = input.match(/.srt|.mkv|.idx|.sub/)[0]
+	} else {
 
-		output.rename = `${output.show.replace('-', '')} - ${output.built}${output.ext}`
+		output.name_with_ext = input
 
-	} else output.rename = input
+		output.ext = input.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
+		output.name_without_ext = input.replace(output.ext, "")
 
-	//console.log(output)
+	}
 
 	console.log(output)
 

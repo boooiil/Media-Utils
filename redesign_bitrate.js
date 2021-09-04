@@ -18,11 +18,11 @@ let o = {
 		quality: null,
 		tune: null,
 		amount: null,
-        crop: null
+		crop: null
 	},
 	settings: {
 		working: process.cwd(),
-		validate: "T://",
+		validate: "//192.168.0.12/T/",
 		encoders: ["h264", "hevc", "nvenc"],
 		tune_1: ["film", "grain"],
 		tune_2: ["animate", "animation", "anime"],
@@ -54,6 +54,15 @@ let o = {
 				crop: "1920:800",
 				scale: "1920:1080"
 			},
+			"1080pn": {
+				bitrate: 2.0,
+				min: 1.6,
+				max: 2.2,
+				width: 1920,
+				height: 1080,
+				crop: "1920:960",
+				scale: "1920:1080"
+			},
 			"720p": {
 				bitrate: 1.4,
 				min: 1.2,
@@ -61,6 +70,15 @@ let o = {
 				width: 1280,
 				height: 720,
 				crop: "1280:534",
+				scale: "1280:720"
+			},
+			"720pn": {
+				bitrate: 1.4,
+				min: 1.2,
+				max: 1.8,
+				width: 1280,
+				height: 720,
+				crop: "1280:640",
 				scale: "1280:720"
 			},
 			"480p": {
@@ -131,7 +149,7 @@ let o = {
 
 process.argv.forEach(arg => {
 
-	if (o.settings.formats[arg]) o.decision.quality = arg;
+	if (/[0-9]+pc|[0-9]+p/.test(arg)) o.decision.quality = arg;
 	if (o.settings.encoders.includes(arg)) o.decision.encoder = arg;
 	if (o.settings.tune_1.includes(arg)) o.decision.tune = arg;
 	if (o.settings.tune_2.includes(arg)) o.decision.tune = "animation";
@@ -139,60 +157,32 @@ process.argv.forEach(arg => {
 	if (arg == "debug") o.debug.toggle = true;
 	if (arg == "crop") o.decision.crop = true;
 	if (arg.includes("-validate:")) o.settings.validate = arg.match(/(?<=-validate:)(.*?)(?=$)/g)
+	if (arg.includes("-help")) o.decision.help = true;
 
 })
+
+if (o.decision.help) return help()
 
 if (!o.decision.quality) { console.log(process.argv); return console.log(chalk.red("Quality was not found.")); }
 if (!o.decision.encoder) o.decision.encoder = "hevc";
 if (!o.decision.amount) o.decision.amount = 1;
 if (!o.decision.tune) o.decision.tune = "film"
 
-/*
+if (o.debug.toggle) {
 
-Media Object:
-
-{
-
-	activity: (current activity valid: [WAITING, EXTRACTING, CONVERTING, VALIDATING, VALIDATED, FINISHED, FAILED]),
-	file: {
-		name: (file name with ext),
-		name_mod: (file name without ext),
-		ext: (file ext),
-		path: (full path to file),
-		series: (numerical value showing the file's intended series)
-		episode: (numerical value showing the file's intended episode)
-	},
-	video: {
-		fps: (fps of the file),
-		total_frames: (total frames of the file),
-		subtitle_map: (map of the file's english subtitle),
-		width: (width of the video),
-		height: (height of the video),
-		ratio: (ratio of the video) 
-		converted_width: o.settings.quality[o.decision.quality].width,
-		converted_height: o.functions.get_resolution(this.video.height, this.video.width, this.video.converted_width)
-		crf: o.settings.quality[o.decision.quality].crf
-	},
-	working: {
-		fps: (fps rate of conversion),
-		completed_frames: (amount of completed frames),
-		quality: (current crf quality),
-		bitrate: (current bitrate)
-	}
-	started: (epoch since start),
-	ended: (epoch since end),
-	ffmpeg_argument: (compiled ffmpeg argument to convert the video)
+	debug_prefix = chalk.red("[DEBUG]")
+	console.log(debug_prefix, chalk.red(" -- Starting Variables -- "))
+	console.log(debug_prefix, chalk.blue("Quality:"), chalk.gray(o.decision.quality))
+	console.log(debug_prefix, chalk.blue("Encoder:"), chalk.gray(o.decision.encoder))
+	console.log(debug_prefix, chalk.blue("Tune:"), chalk.gray(o.decision.tune))
+	console.log(debug_prefix, chalk.blue("Amount:"), chalk.gray(o.decision.amount))
+	console.log(debug_prefix, chalk.blue("Crop:"), chalk.gray((o.decision.crop ? "YES" : "NO")))
+	console.log(debug_prefix, chalk.blue("Working Dir:"), chalk.gray(o.settings.working))
+	console.log(debug_prefix, chalk.blue("Validation Dir:"), chalk.gray(o.settings.validate))
+	console.log(debug_prefix, chalk.red(" -- Starting Variables -- "))
 
 }
 
-Notes:
-
-	* Have the media get put back into the array and just check if the key "ended" is not null in the next object of the array.
-	* If the next item has the key, end the script as we have completed the full loop.
-
-	* We will likely have to create our own sort function.
-
-*/
 main()
 
 function main() {
@@ -203,28 +193,43 @@ function main() {
 
 		fs.stat(file, (err, stat) => {
 
-			if (stat.isFile && file.includes(".mkv")) {
+			if (stat.isFile && (file.includes(".mkv") || file.includes(".avi"))) {
 
 				let name = rename(file)
+
+				if (o.debug.toggle) console.log(debug_prefix, chalk.blue("Media File:"), chalk.gray(file))
 
 				let object = {
 					activity: "Waiting",
 					file: {
-						name: name.rename,
-						name_mod: name.rename.replace(".mkv", ""),
-						name_new: name.rename.replace(".mkv", ".mp4"),
-						ext: ".mkv",
+						name: name.name_with_ext,
+						name_mod: name.name_without_ext,
+						name_new: name.name_without_ext + ".mp4",
+						ext: name.ext,
 						size: stat.size,
 						new_size: null,
 						val_size: null,
-						path: o.settings.working + "/" + name.rename,
-						path_new: o.settings.working + "/" + name.rename.replace(".mkv", ".mp4"),
+						path: o.settings.working + "/" + name.name_with_ext,
+						path_new: o.settings.working + "/" + name.name_without_ext + ".mp4",
 						series: name.series,
 						episode: name.episode
 					}
 				}
 
-				if (name.rename != file) fs.renameSync(`./${file}`, name.rename)
+				if (o.debug.toggle) {
+
+					console.log(debug_prefix, chalk.blue("Name:"), chalk.gray(object.file.name))
+					console.log(debug_prefix, chalk.blue("Modified Name:"), chalk.gray(object.file.name_mod))
+					console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(object.file.name_new))
+					console.log(debug_prefix, chalk.blue("Extension:"), chalk.gray(object.file.ext))
+					console.log(debug_prefix, chalk.blue("Size:"), chalk.gray(object.file.size))
+					console.log(debug_prefix, chalk.blue("Path:"), chalk.gray(object.file.path))
+					console.log(debug_prefix, chalk.blue("New Path:"), chalk.gray(object.file.path_new))
+					console.log(debug_prefix, chalk.blue("Series:"), chalk.gray(object.file.series))
+					console.log(debug_prefix, chalk.blue("Episode:"), chalk.gray(object.file.episode))
+
+				}
+				if (name.name_with_ext != file) fs.renameSync(`./${file}`, name.name_with_ext)
 
 				o.files.push(object)
 
@@ -232,13 +237,18 @@ function main() {
 
 			else if (stat.isDirectory() && file.toLowerCase().includes("sub")) {
 
+
+				if (o.debug.toggle) console.log(debug_prefix, chalk.blue("Subtitle:"), chalk.gray(file))
+
 				fs.readdirSync(o.settings.working + "/" + file).forEach(file1 => {
 
 					if (/.idx|.sub/.test(file1)) {
 
 						let name = rename(file1)
 
-						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.rename)
+						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(name.name_with_ext))
+
+						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.name_with_ext)
 
 					}
 
@@ -246,7 +256,9 @@ function main() {
 
 						let name = rename(file1)
 
-						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.rename.replace(name.ext, "") + ".en" + name.ext)
+						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(name.name_with_ext))
+
+						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.name_with_ext.replace(name.ext, "") + ".en" + name.ext)
 
 					}
 
@@ -335,6 +347,9 @@ function updateScreen() {
 			o.files.forEach(media => {
 
 				let file_name = `${open_bracket + chalk.blue("FILE") + close_bracket} ${chalk.gray(media.file.name_mod)}`
+
+				if (media.file.name_mod == null) throw media;
+
 				let activity = `${open_bracket + chalk.blue("STATUS") + close_bracket} ${chalk.gray(media.activity)}`
 
 				if (media.activity == "Waiting") {
@@ -377,8 +392,8 @@ function updateScreen() {
 			o.debug.stats.file = false;
 
 			//CONVERT
-			o.debug.convert.data = true;
-			o.debug.convert.file = true;
+			o.debug.convert.data = false;
+			o.debug.convert.file = false;
 
 			//VALIDATE
 			o.debug.validate.data = false;
@@ -402,7 +417,7 @@ function overlook() {
 
 			let next = o.files[0]
 
-			if (next.activity == "Validated" || next.activity.includes("Failed") || next.activity == "Finished") {
+			if (!next || next.activity == "Validated" || next.activity.includes("Failed") || next.activity == "Finished") {
 
 				if (current_amount == 0) process.exit()
 
@@ -529,38 +544,6 @@ function overlook() {
 
 }
 
-/**
- * @param {Object} media
- * @param {String} media.activity - Current activity of the media.
- * @param {Object} media.file
- * @param {String} media.file.name - Name of the file with extension.
- * @param {String} media.file.name_mod - Name of the file without extension.
- * @param {String} media.file.ext - Extension of the file.
- * @param {String} media.file.path - Absolute path of the file.
- * @param {String} media.file.series - Series obtained from file name.
- * @param {String} media.file.episode - Episode obtained from file name.
- * @param {String} media.file.path_new - New absolute path of the file.
- * @param {Object} media.video
- * @param {Number} media.video.fps - Current media frames per second.
- * @param {Number} media.video.total_frames - Total amount of frames from the file.
- * @param {String=} media.video.subtitle_map - Subtitle map obtained from statistics.
- * @param {String} media.video.width - Current media width.
- * @param {String} media.video.height - Current media height.
- * @param {String} media.video.ratio - Aspect ratio of the current media.
- * @param {String} media.video.converted_width - Calculated width using the new resolution.
- * @param {String} media.video.converted_height - Calculated height using the new resolution.
- * @param {String} media.video.converted_resolution - Calculated resolution using the new height and width.
- * @param {String} media.video.crop - Adjusted crop based on resolution decision.
- * @param {String} media.video.crf - Quality target determined by presets.
- * @param {Object} media.working
- * @param {Number} media.working.fps - Current processed frames per second.
- * @param {Number} media.working.completed_frames - Amount of completed frames since the start of conversion.
- * @param {Number} media.working.quality - Current quality factor determined by ffmpeg.
- * @param {Number} media.working.bitrate - Average bitrate of processed frames.
- * @param {Number} media.started - Epoch of when the media started.
- * @param {Number} media.ended - Epoch of when the media ended.
- * @param {String[]} media.ffmpeg_argument - Array of ffmpeg arguments.
- */
 function spawnStatisticsInstance(media) {
 
 	media.process = true
@@ -578,9 +561,9 @@ function spawnStatisticsInstance(media) {
 		else media.video.fps = null
 
 
-		if (data.match(/(?<=NUMBER_OF_FRAMES: )(.*)(?=$)/gm) != null) media.video.total_frames = data.match(/(?<=NUMBER_OF_FRAMES: )(.*)(?=$)/gm)[0] * 1000;
-		else if (data.match(/(?<=NUMBER_OF_FRAMES-eng: )(.*)(?=$)/gm) != null) media.video.total_frames = data.match(/(?<=NUMBER_OF_FRAMES-eng: )(.*)(?=$)/gm)[0] * 1000;
-		else if (data.match(/(?<=Duration: )(.*?)(?=,)/gm) != null) {
+		if (/(?<=NUMBER_OF_FRAMES: )(.*)(?=$)/gm.test(data)) media.video.total_frames = data.match(/(?<=NUMBER_OF_FRAMES: )(.*)(?=$)/gm)[0] * 1000;
+		else if (/(?<=NUMBER_OF_FRAMES-eng: )(.*)(?=$)/gm.test(data)) media.video.total_frames = data.match(/(?<=NUMBER_OF_FRAMES-eng: )(.*)(?=$)/gm)[0] * 1000;
+		else if (/(?<=Duration: )(.*?)(?=,)/gm.test(data)) {
 
 
 
@@ -592,7 +575,7 @@ function spawnStatisticsInstance(media) {
 
 		}
 
-		if (data.trim().match(/(?<=, )(([0-9]+x[0-9]+))(?=)/gm) != null) {
+		if (/(?<=, )(([0-9]+x[0-9]+))(?=)/gm.test(data.trim())) {
 
 			let resolution = data.match(/(?<=, )(([0-9]+x[0-9]+))(?=)/gm)[0].split('x')
 
@@ -602,9 +585,9 @@ function spawnStatisticsInstance(media) {
 
 		} else throw new Error('Could not find resolution: \n' + data);
 
-		if (data.match(/(?=.*\(eng\): )(.*)(?<=)/gm)) {
+		if (/(?=.*[S-s]ubtitle: )(.*)(?=)/gm.test(data)) {
 
-			data.match(/(?=.*\(eng\): )(.*)(?<=)/gm).forEach(line => {
+			data.match(/(?=.*[S-s]ubtitle: )(.*)(?=)/gm).forEach(line => {
 
 				line = line.toLowerCase()
 
@@ -699,143 +682,81 @@ function spawnConversionInstance(media) {
 
 		if (decFallback) {
 
-			if (o.decision.tune == "film" && codec == "libx265") {
+			media.ffmpeg_argument = [
+				`-threads`, `4`,
+				`-i`, `${media.file.path}`,
+				`-map`, `0:v:0`,
+				`-map`, `0:a?`,
+				`-map`, `0:s?`,
+				`-vcodec`, `${codec}`,
+				`-preset`, `slow`,
+				`-level`, `4.1`,
+				`-b:v`, `${media.video.bitrate}M`,
+				`-bufsize`, `${media.video.bufsize}M`,
+				`-maxrate`, `${media.video.max}M`,
+				`-minrate`, `${media.video.min}M`,
+				`-c:a`, `aac`,
+				`-b:a`, `128k`,
+				`-ac`, `2`,
+				`-vf`, `scale=${media.video.converted_resolution}:flags=lanczos${o.decision.crop ? ",crop=" + media.video.crop : ""}`,
+			]
 
-				media.ffmpeg_argument = [
-					`-threads`, `4`,
-					`-i`, `${media.file.path}`,
-					`-map`, `0:v:0`,
-					`-map`, `0:a?`,
-					`-map`, `0:s?`,
-					`-vcodec`, `${codec}`,
-					`-preset`, `slow`,
-					`-level`, `4.1`,
-					`-b:v`, `${media.video.bitrate}M`,
-					`-bufsize`, `${media.video.bufsize}M`,
-					`-maxrate`, `${media.video.max}M`,
-					`-minrate`, `${media.video.min}M`,
-					`-c:a`, `aac`,
-					`-b:a`, `128k`,
-					`-ac`, `2`,
-					`-vf`, `scale=${media.video.converted_resolution}:flags=lanczos${o.decision.crop ? ",crop=" + media.video.crop : ""}`,
-				]
+			if (!(o.decision.tune == "film" && codec == "libx265")) {
 
-				if (media.video.use_subtitle) {
-
-					media.ffmpeg_argument.push('-c:s')
-					media.ffmpeg_argument.push(`${media.video.use_subtitle == 'mov' ? 'mov_text' : 'copy'}`)
-
-				}
-
-				media.ffmpeg_argument.push(`-y`)
-				media.ffmpeg_argument.push(`${media.file.path_new}`)
+				media.ffmpeg_argument.push("-tune")
+				media.ffmpeg_argument.push(o.decision.tune)
 
 			}
 
-			else {
+			if (media.video.use_subtitle) {
 
-				media.ffmpeg_argument = [
-					`-threads`, `4`,
-					`-i`, `${media.file.path}`,
-					`-map`, `0:v:0`,
-					`-map`, `0:a?`,
-					`-map`, `0:s?`,
-					`-vcodec`, `${codec}`,
-					`-preset`, `slow`,
-					`-level`, `4.1`,
-					`-b:v`, `${media.video.bitrate}M`,
-					`-bufsize`, `${media.video.bufsize}M`,
-					`-maxrate`, `${media.video.max}M`,
-					`-minrate`, `${media.video.min}M`,
-					`-c:a`, `aac`,
-					`-b:a`, `128k`,
-					`-ac`, `2`,
-					`-tune`, `${o.decision.tune}`,
-					`-vf`, `scale=${media.video.converted_resolution}:flags=lanczos${o.decision.crop ? ",crop=" + media.video.crop : ""}`,
-				]
-
-				if (media.video.use_subtitle) {
-
-					media.ffmpeg_argument.push('-c:s')
-					media.ffmpeg_argument.push(`${media.video.use_subtitle == 'mov' ? 'mov_text' : 'copy'}`)
-
-				}
-
-				media.ffmpeg_argument.push(`-y`)
-				media.ffmpeg_argument.push(`${media.file.path_new}`)
+				media.ffmpeg_argument.push('-c:s')
+				media.ffmpeg_argument.push(`${media.video.use_subtitle == 'mov' ? 'mov_text' : 'copy'}`)
 
 			}
+
+			media.ffmpeg_argument.push(`-y`)
+			media.ffmpeg_argument.push(`${media.file.path_new}`)
 
 		} else {
 
-			if (o.decision.tune == "film" && codec == "libx265") {
+			media.ffmpeg_argument = [
+				`-threads`, `4`,
+				`-hwaccel`, `cuda`,
+				`-i`, `${media.file.path}`,
+				`-map`, `0:v:0`,
+				`-map`, `0:a?`,
+				`-map`, `0:s?`,
+				`-vcodec`, `${codec}`,
+				`-preset`, `slow`,
+				`-level`, `4.1`,
+				`-b:v`, `${media.video.bitrate}M`,
+				`-bufsize`, `${media.video.bufsize}M`,
+				`-maxrate`, `${media.video.max}M`,
+				`-minrate`, `${media.video.min}M`,
+				`-c:a`, `aac`,
+				`-b:a`, `128k`,
+				`-ac`, `2`,
+				`-vf`, `scale=${media.video.converted_resolution}:flags=lanczos${o.decision.crop ? ",crop=" + media.video.crop : ""}`,
+			]
 
-				media.ffmpeg_argument = [
-					`-threads`, `4`,
-					`-hwaccel`, `cuda`,
-					`-i`, `${media.file.path}`,
-					`-map`, `0:v:0`,
-					`-map`, `0:a?`,
-					`-map`, `0:s?`,
-					`-vcodec`, `${codec}`,
-					`-preset`, `slow`,
-					`-level`, `4.1`,
-					`-b:v`, `${media.video.bitrate}M`,
-					`-bufsize`, `${media.video.bufsize}M`,
-					`-maxrate`, `${media.video.max}M`,
-					`-minrate`, `${media.video.min}M`,
-					`-c:a`, `aac`,
-					`-b:a`, `128k`,
-					`-ac`, `2`,
-					`-vf`, `scale=${media.video.converted_resolution}:flags=lanczos${o.decision.crop ? ",crop=" + media.video.crop : ""}`,
-				]
+			if (!(o.decision.tune == "film" && codec == "libx265")) {
 
-				if (media.video.use_subtitle) {
-
-					media.ffmpeg_argument.push('-c:s')
-					media.ffmpeg_argument.push(`${media.video.use_subtitle == 'mov' ? 'mov_text' : 'copy'}`)
-
-				}
-
-				media.ffmpeg_argument.push(`-${encFallback ? 'y' : 'n'}`)
-				media.ffmpeg_argument.push(`${media.file.path_new}`)
+				media.ffmpeg_argument.push("-tune")
+				media.ffmpeg_argument.push(o.decision.tune)
 
 			}
 
-			else {
+			if (media.video.use_subtitle) {
 
-				media.ffmpeg_argument = [
-					`-threads`, `4`,
-					`-hwaccel`, `cuda`,
-					`-i`, `${media.file.path}`,
-					`-map`, `0:v:0`,
-					`-map`, `0:a?`,
-					`-map`, `0:s?`,
-					`-vcodec`, `${codec}`,
-					`-preset`, `slow`,
-					`-level`, `4.1`,
-					`-b:v`, `${media.video.bitrate}M`,
-					`-bufsize`, `${media.video.bufsize}M`,
-					`-maxrate`, `${media.video.max}M`,
-					`-minrate`, `${media.video.min}M`,
-					`-c:a`, `aac`,
-					`-b:a`, `128k`,
-					`-ac`, `2`,
-					`-tune`, `${o.decision.tune}`,
-					`-vf`, `scale=${media.video.converted_resolution}:flags=lanczos${o.decision.crop ? ",crop=" + media.video.crop : ""}`,
-				]
-
-				if (media.video.use_subtitle) {
-
-					media.ffmpeg_argument.push('-c:s')
-					media.ffmpeg_argument.push(`${media.video.use_subtitle == 'mov' ? 'mov_text' : 'copy'}`)
-
-				}
-
-				media.ffmpeg_argument.push(`-${encFallback ? 'y' : 'n'}`)
-				media.ffmpeg_argument.push(`${media.file.path_new}`)
+				media.ffmpeg_argument.push('-c:s')
+				media.ffmpeg_argument.push(`${media.video.use_subtitle == 'mov' ? 'mov_text' : 'copy'}`)
 
 			}
+
+			media.ffmpeg_argument.push(`-${encFallback ? 'y' : 'n'}`)
+			media.ffmpeg_argument.push(`${media.file.path_new}`)
+
 		}
 
 		convert()
@@ -861,7 +782,7 @@ function spawnConversionInstance(media) {
 				setTimeout(() => { return assemble(true) }, 500);
 
 			}
-			else if (data.includes('Cannot load nvcuda.dll') || data.includes('device type cuda needed for codec h264')) {
+			else if (data.includes('Cannot load nvcuda.dll') || data.includes('device type cuda needed for codec')) {
 
 				encode.kill()
 				setTimeout(() => { return assemble(true, true) }, 500);
@@ -876,7 +797,7 @@ function spawnConversionInstance(media) {
 			}
 
 			else {
-				if (data.match(/(?<=frame=)(.*)(?=fps)/g) != null) {
+				if (/(?<=frame=)(.*)(?=fps)/g.test(data)) {
 
 					let quality = data.match(/(?<=q=)(.*?)(?= )/g)
 					let bitrate = data.match(/(?<=bitrate=)(.*?)(?=kbits\/s)/g)
@@ -911,37 +832,6 @@ function spawnConversionInstance(media) {
 
 }
 
-/**
- * @param {Object} media
- * @param {String} media.activity - Current activity of the media.
- * @param {Object} media.file
- * @param {String} media.file.name - Name of the file with extension.
- * @param {String} media.file.name_mod - Name of the file without extension.
- * @param {String} media.file.ext - Extension of the file.
- * @param {String} media.file.path - Absolute path of the file.
- * @param {String} media.file.series - Series obtained from file name.
- * @param {String} media.file.episode - Episode obtained from file name.
- * @param {Object} media.video
- * @param {Number} media.video.fps - Current media frames per second.
- * @param {Number} media.video.total_frames - Total amount of frames from the file.
- * @param {String=} media.video.subtitle_map - Subtitle map obtained from statistics.
- * @param {String} media.video.width - Current media width.
- * @param {String} media.video.height - Current media height.
- * @param {String} media.video.ratio - Aspect ratio of the current media.
- * @param {String} media.video.converted_width - Calculated width using the new resolution.
- * @param {String} media.video.converted_height - Calculated height using the new resolution.
- * @param {String} media.video.converted_resolution - Calculated resolution using the new height and width.
- * @param {String} media.video.crop - Adjusted crop based on resolution decision.
- * @param {String} media.video.crf - Quality target determined by presets.
- * @param {Object} media.working
- * @param {Number} media.working.fps - Current processed frames per second.
- * @param {Number} media.working.completed_frames - Amount of completed frames since the start of conversion.
- * @param {Number} media.working.quality - Current quality factor determined by ffmpeg.
- * @param {Number} media.working.bitrate - Average bitrate of processed frames.
- * @param {Number} media.started - Epoch of when the media started.
- * @param {Number} media.ended - Epoch of when the media ended.
- * @param {String[]} media.ffmpeg_argument - Array of ffmpeg arguments.
- */
 function spawnValidationInstance(media) {
 
 	media.process = true
@@ -959,7 +849,7 @@ function spawnValidationInstance(media) {
 		if (o.debug.validate.data) console.log(data)
 		if (o.debug.validate.file) console.log(media)
 
-		if (data.match(/(?<=frame=)(.*)(?=fps)/g) != null) {
+		if (/(?<=frame=)(.*)(?=fps)/g.test(data)) {
 
 			let quality = data.match(/(?<=q=)(.*?)(?= )/g)
 			let bitrate = data.match(/(?<=bitrate=)(.*?)(?=kbits\/s)/g)
@@ -1008,7 +898,8 @@ function rename(input) {
 	//console.log(input)
 
 	let output = {
-		rename: null,
+		name_with_ext: null,
+		name_without_ext: null,
 		ext: null,
 		show: null,
 		series: null,
@@ -1016,10 +907,24 @@ function rename(input) {
 		season: null,
 		episode: []
 	}
+	// s\d{2})    				 	- Matches s00			  (s and any 2 numbers)
+	// (e|-e|.e)([0-9]+)	     	- Matches e00			  (e variant and any number)
+	// (s\d{2})((e|-e|.e)([0-9]+))+ - Matches s00e00 variants (s, any 2 numbers, e variant, and any number)
 
-	if (input.match(/((s[0-9]+)((e[0-9]+)+|(.e[0-9]+)+))((-e[0-9]+)+)?/ig) != null) {
+	// \d{2}						- Matches 00    		  (any 2 numbers)
+	// (x([0-9]+))					- Matches x00   		  (x and any number)
+	// \d{2}(x([0-9]+))+			- Matches 00x00 		  (any 2 numbers, x, and any number)
 
-		output.season = input.match(/((s[0-9]+)((e[0-9]+)+|(.e[0-9]+)+))((-e[0-9]+)+)?/ig, '')[0]
+	if (/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig.test(input)) {
+
+		output.season = input.match(/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig)[0]
+
+		if (/\d{2}(x([0-9]+))+/.test(output.season)) {
+
+			output.season = output.season.replace(/x/ig, 'e')
+			output.season = "s" + output.season
+
+		}
 
 		output.season = output.season.replace(/\.|-/g, '')
 		output.season = output.season.replace(/s/ig, 's')
@@ -1037,16 +942,23 @@ function rename(input) {
 
 		})
 
+		output.show = input.replace(/\./g, ' ').match(/(.*)(?=(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+)/g, '')[0]
+		output.show = output.show.replace(/\[/g, '').trim()
+		output.show = output.show.replace(/-/g, '').trim()
+		
+		output.ext = input.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
 
-		output.show = input.replace(/\./g, ' ').match(/(.*?)(?=[S-s][0-9])/g, '')[0].replace(/-/g, '').trim()
+		output.name_with_ext = `${output.show.replace('-', '')} - ${output.built}${output.ext}`
+		output.name_without_ext = `${output.show.replace('-', '')} - ${output.built}`
 
-		output.ext = input.match(/.srt|.mkv|.idx|.sub/)[0]
+	} else {
 
-		output.rename = `${output.show.replace('-', '')} - ${output.built}${output.ext}`
+		output.name_with_ext = input
 
-	} else output.rename = input
+		output.ext = input.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
+		output.name_without_ext = input.replace(output.ext, "")
 
-	//console.log(output)
+	}
 
 	console.log(output)
 
@@ -1060,9 +972,13 @@ function time(value, type) {
 
 		let date = new Date();
 
-		let a = date.getHours(); let b = date.getMinutes(); let c = date.getSeconds();
-		let d = a == 12 ? 'PM' : a > 12 ? 'PM' : 'AM'; let h = a == 12 || (a > 9 && a < 12) ? `${a}` : a > 12 ? a - 12 > 9 ? `${a - 12}` : `0${a - 12}` : `0${a}`
-		let m = String(b).length == 2 ? b : `0${b}`; let s = String(c).length == 2 ? c : `0${c}`
+		let a = date.getHours();
+		let b = date.getMinutes();
+		let c = date.getSeconds();
+		let d = a == 12 ? 'PM' : a > 12 ? 'PM' : 'AM';
+		let h = a == 12 || (a > 9 && a < 12) ? `${a}` : a > 12 ? a - 12 > 9 ? `${a - 12}` : `0${a - 12}` : `0${a}`
+		let m = String(b).length == 2 ? b : `0${b}`;
+		let s = String(c).length == 2 ? c : `0${c}`
 
 		return `${h}:${m}:${s}-${d} - ${date.toDateString()}`;
 
@@ -1072,9 +988,13 @@ function time(value, type) {
 
 		let date = new Date(value)
 
-		let a = date.getHours(); let b = date.getMinutes(); let c = date.getSeconds();
-		let d = a == 12 ? 'PM' : a > 12 ? 'PM' : 'AM'; let h = a == 12 || (a > 9 && a < 12) ? `${a}` : a > 12 ? a - 12 > 9 ? `${a - 12}` : `0${a - 12}` : `0${a}`
-		let m = String(b).length == 2 ? b : `0${b}`; let s = String(c).length == 2 ? c : `0${c}`
+		let a = date.getHours();
+		let b = date.getMinutes();
+		let c = date.getSeconds();
+		let d = a == 12 ? 'PM' : a > 12 ? 'PM' : 'AM';
+		let h = a == 12 || (a > 9 && a < 12) ? `${a}` : a > 12 ? a - 12 > 9 ? `${a - 12}` : `0${a - 12}` : `0${a}`
+		let m = String(b).length == 2 ? b : `0${b}`;
+		let s = String(c).length == 2 ? c : `0${c}`
 
 		return `${h}:${m}:${s}-${d}`;
 
@@ -1093,6 +1013,42 @@ function time(value, type) {
 		return `${hours ? hours + ' Hour(s) ' : ''}${minutes ? minutes + ' Minute(s) ' : ''}${seconds ? seconds + ' Second(s) ' : ''}`
 
 	}
+}
+
+function help() {
+
+	return console.log(
+
+		`------------- ${chalk.blue("REDESIGN HELP")} -------------\n` +
+		`\n` +
+		`Usage: ${chalk.blue("redesign.js")} [${chalk.blue("resolution")}] [${chalk.blue("amount")}] [${chalk.blue("codec")}] [${chalk.blue("tune")}] [${chalk.blue("overrides")}]\n` +
+		`\n` +
+		`Resolution:\n` +
+		`   One of the pre-configured resolutons [` +
+		`${chalk.blue("2160p")}, ${chalk.blue("1440p")}, ${chalk.blue("1080pn")}, ${chalk.blue("720p")}, ${chalk.blue("480p")}` +
+		`] (must include the p)\n` +
+		`\n` +
+		`   Special Formats:\n` +
+		`      ${chalk.blue("1080pn")} - Netflix cropping (${chalk.blue("2:1")})\n` +
+		`      ${chalk.blue("720pn")}  - Netflix cropping (${chalk.blue("2:1")})\n` +
+		`      ${chalk.blue("480pc")}  - NTSC cropping    (${chalk.blue("32:27")})\n` +
+		`\n` +
+		`Amount:\n` +
+		`   Amount of media to convert at once.\n` +
+		`\n` +
+		`Codec:\n` +
+		`   One of the pre-configured codecs [${chalk.blue("hevc")}, ${chalk.blue("nvenc")}, ${chalk.blue("h264")}]\n` +
+		`\n` +
+		`Tune:\n` +
+		`   One of the ffmpeg tune profiles [${chalk.blue("film")}, ${chalk.blue("animaton")}, ${chalk.blue("grain")}]\n` +
+		`\n` +
+		`Overrides:` +
+		`\n` +
+		`   ${chalk.blue("-validate:")}[${chalk.blue("dir")}]   - Override the validation directory\n` +
+		`   ${chalk.blue("-quality:")}[${chalk.blue("crf/cq")}] - Override the quality for the resolution preset\n`
+
+	)
+
 }
 
 return;
