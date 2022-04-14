@@ -1141,12 +1141,14 @@ class Media {
 
 	rename() {
 
-		if (/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig.test(this.file.name)) {
+		//Change regex into blocks that we can select so that we can easily extract episode and season
 
-			let season = this.file.name.match(/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig)[0]
+		if (/s\d{2}((e|-e|.e)(\d{2,}))+|\d{2}(x(\d{2,}))+/ig.test(this.file.name)) {
+
+			let season = this.file.name.match(/s\d{2}((e|-e|.e)(\d{2,}))+|\d{2}(x(\d{2,}))+/ig)[0]
 			let built;
 
-			if (/\d{2}(x([0-9]+))+/.test(season)) {
+			if (/\d{2}(x(\d{2,}))+/.test(season)) {
 
 				season = season.replace(/x/ig, 'e')
 
