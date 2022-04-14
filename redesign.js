@@ -186,7 +186,7 @@ let o = {
 process.argv.forEach(arg => {
 
 	if (/^[0-9]+p/.test(arg)) o.decision.quality = arg;
-	
+
 	if (o.settings.encoders.includes(arg)) o.decision.encoder = arg;
 	if (o.settings.tune_1.includes(arg)) o.decision.tune = arg;
 	if (o.settings.tune_2.includes(arg)) o.decision.tune = "animation";
@@ -240,7 +240,7 @@ if (o.decision.quality && !o.settings.formats[o.decision.quality]) {
 	custom.scale = custom.width + ":" + custom.height
 
 }
-else if (!o.decision.quality) { 
+else if (!o.decision.quality) {
 
 	o.decision.quality = "720p"
 	//console.log(process.argv); return console.log(chalk.red("Quality was not found.")); 
@@ -306,48 +306,33 @@ function main() {
 
 			if (stat.isFile() && (file.includes(".mkv") || file.includes(".avi"))) {
 
-				let name = rename(file)
+				let media = new Media(file, o.settings.working + "/" + file)
 
-				
+				media.rename()
+
+				media.file.size = stat.size;
+				media.file.path_new = o.settings.working + "/" + media.file.name_new;
+
 				if (o.debug.toggle) console.log(debug_prefix, chalk.red(" -- Media File -- "))
 				if (o.debug.toggle) console.log(debug_prefix, chalk.blue("Media File:"), chalk.gray(file))
 
-				let object = {
-					activity: "Waiting",
-					file: {
-						name: name.name_with_ext,
-						name_mod: name.name_without_ext,
-						name_new: name.name_without_ext + ".mp4",
-						ext: name.ext,
-						size: stat.size,
-						new_size: null,
-						val_size: null,
-						path: o.settings.working + "/" + name.name_with_ext,
-						path_new: o.settings.working + "/" + name.name_without_ext + ".mp4",
-						show: name.show,
-						series: name.series,
-						season_number: name.season_number,
-						episode: name.episode
-					}
-				}
-
 				if (o.debug.toggle) {
 
-					console.log(debug_prefix, chalk.blue("Name:"), chalk.gray(object.file.name))
-					console.log(debug_prefix, chalk.blue("Modified Name:"), chalk.gray(object.file.name_mod))
-					console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(object.file.name_new))
-					console.log(debug_prefix, chalk.blue("Extension:"), chalk.gray(object.file.ext))
-					console.log(debug_prefix, chalk.blue("Size:"), chalk.gray(object.file.size))
-					console.log(debug_prefix, chalk.blue("Path:"), chalk.gray(object.file.path))
-					console.log(debug_prefix, chalk.blue("New Path:"), chalk.gray(object.file.path_new))
-					console.log(debug_prefix, chalk.blue("Series:"), chalk.gray(object.file.series))
-					console.log(debug_prefix, chalk.blue("Episode:"), chalk.gray(object.file.episode))
+					console.log(debug_prefix, chalk.blue("Name:"), chalk.gray(media.file.name))
+					console.log(debug_prefix, chalk.blue("Modified Name:"), chalk.gray(media.file.name_mod))
+					console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(media.file.name_new))
+					console.log(debug_prefix, chalk.blue("Extension:"), chalk.gray(media.file.ext))
+					console.log(debug_prefix, chalk.blue("Size:"), chalk.gray(media.file.size))
+					console.log(debug_prefix, chalk.blue("Path:"), chalk.gray(media.file.path))
+					console.log(debug_prefix, chalk.blue("New Path:"), chalk.gray(media.file.path_new))
+					console.log(debug_prefix, chalk.blue("Series:"), chalk.gray(media.file.series))
+					console.log(debug_prefix, chalk.blue("Episode:"), chalk.gray(media.file.episode))
 					console.log(debug_prefix, chalk.red(" -- Media File -- \n"))
 
 				}
-				if (name.name_with_ext != file) fs.renameSync(`./${file}`, name.name_with_ext)
+				if (media.file.name != file) fs.renameSync(`./${file}`, media.file.name)
 
-				o.files.push(object)
+				o.files.push(media)
 
 			}
 
@@ -356,25 +341,29 @@ function main() {
 
 				if (o.debug.toggle) console.log(debug_prefix, chalk.blue("Subtitle:"), chalk.gray(file))
 
-				fs.readdirSync(o.settings.working + "/" + file).forEach(file1 => {
+				fs.readdirSync(o.settings.working + "/" + file).forEach(subtitle => {
 
-					if (/.idx|.sub/.test(file1)) {
+					if (/.idx|.sub/.test(subtitle)) {
 
-						let name = rename(file1)
+						let media = new Media(subtitle, o.settings.working + "/" + file + "/" + subtitle)
 
-						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(name.name_with_ext))
+						media.rename()
 
-						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.name_with_ext)
+						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(media.file.name))
+
+						fs.renameSync(o.settings.working + "/" + file + "/" + subtitle, o.settings.working + "/" + media.file.name)
 
 					}
 
-					else if (/.srt/.test(file1)) {
+					else if (/.srt/.test(subtitle)) {
 
-						let name = rename(file1)
+						let media = new Media(subtitle, o.settings.working + "/" + file + "/" + subtitle)
 
-						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(name.name_with_ext))
+						media.rename()
 
-						fs.renameSync(o.settings.working + "/" + file + "/" + file1, o.settings.working + "/" + name.name_with_ext.replace(name.ext, "") + ".en" + name.ext)
+						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(media.file.name))
+
+						fs.renameSync(o.settings.working + "/" + file + "/" + subtitle, o.settings.working + "/" + media.file.name.replace(media.file.ext, "") + ".en" + media.file.ext)
 
 					}
 
@@ -436,7 +425,7 @@ function updateScreen() {
 				let media_fps = media.working.fps
 				let bitrate = `${ob + chalk.blue("BIT") + cb} ${chalk.gray(media.working.bitrate)}`
 				let cq = `${ob + chalk.blue("QUAL") + cb} ${chalk.gray(Math.trunc((media.video.crf / media.working.quality) * 100))}%`
-				let speed = `${ob + chalk.blue("SPEED") + cb} ${chalk.gray(Math.trunc(( media_fps / media.video.fps) * 100) / 100)}`
+				let speed = `${ob + chalk.blue("SPEED") + cb} ${chalk.gray(Math.trunc((media_fps / media.video.fps) * 100) / 100)}`
 				let eta = `${ob + chalk.blue("ETA") + cb} ${chalk.gray(time(Math.ceil((total_frames - completed_frames) / media_fps), 1))}`
 
 				let activity = `${ob + chalk.blue("ACT") + cb} ${chalk.gray(media.activity)}`
@@ -505,11 +494,11 @@ function updateScreen() {
 			//TOGGLES
 
 			//STATS
-			o.debug.stats.data = false;
+			o.debug.stats.data = true;
 			o.debug.stats.file = false;
 
 			//CONVERT
-			o.debug.convert.data = false;
+			o.debug.convert.data = true;
 			o.debug.convert.file = false;
 
 			//VALIDATE
@@ -532,7 +521,10 @@ function overlook() {
 
 		if (current_amount < o.decision.amount) {
 
-			let next = o.files[0]
+			/**
+			 * @type {Media}
+			 */
+			let next = o.files.shift()
 
 			if (!next || next.activity == "Validated" || next.activity.includes("Failed") || next.activity == "Finished") {
 
@@ -541,67 +533,10 @@ function overlook() {
 			}
 			else {
 
-				let media = {
+				next.activity = "Statistics"
+				next.started = new Date().getTime()
 
-					activity: "Statistics",
-
-					file: {
-
-						name: next.file.name,
-						name_mod: next.file.name_mod,
-						name_new: next.file.name_new,
-						ext: next.file.ext,
-						size: next.file.size,
-						new_size: next.file.new_size,
-						val_size: next.file.val_size,
-						path: next.file.path,
-						path_new: next.file.path_new,
-						show: next.file.show,
-						series: next.file.series,
-						season_number: next.file.season_number,
-						episode: next.file.episode
-
-					},
-
-					video: {
-
-						fps: null,
-						total_frames: null,
-						use_subtitle: null,
-						width: null,
-						height: null,
-						resolution: null,
-						ratio: null,
-						converted_width: null,
-						converted_height: null,
-						converted_resolution: null,
-						crop: null,
-						crf: null,
-						bitrate: null,
-						bufsize: null,
-						min: null,
-						max: null
-
-					},
-
-					working: {
-
-						fps: 0,
-						completed_frames: 0,
-						quality: 0,
-						bitrate: 0
-
-					},
-
-					started: new Date().getTime(),
-					ended: null,
-					ffmpeg_argument: [],
-					process: null
-				}
-
-				o.current[next.file.name_mod] = media
-
-				o.files.shift()
+				o.current[next.file.name_mod] = next
 
 			}
 
@@ -619,6 +554,9 @@ function overlook() {
 
 		Object.keys(o.current).forEach(file => {
 
+			/**
+			 * @type {Media}
+			 */
 			let media = o.current[file]
 
 			if (!media.process) {
@@ -632,30 +570,9 @@ function overlook() {
 
 			if (media.activity == "Finished" || media.activity.includes("Failed")) {
 
-				let object = {
+				media.ended = new Date().getTime()
 
-					activity: media.activity,
-
-					file: {
-						name: media.file.name,
-						name_mod: media.file.name_mod,
-						ext: media.file.ext,
-						size: media.file.size,
-						new_size: media.file.new_size,
-						val_size: media.file.val_size,
-						path: media.file.path,
-						show: media.file.show,
-						series: media.file.series,
-						season_number: media.file.season_number,
-						episode: media.file.episode
-					},
-
-					started: media.started,
-					ended: new Date().getTime(),
-
-				}
-
-				o.files.push(object)
+				o.files.push(media)
 
 				delete o.current[media.file.name_mod]
 
@@ -667,6 +584,9 @@ function overlook() {
 
 }
 
+/**
+ * @param {Media} media
+ */
 function spawnStatisticsInstance(media) {
 
 	media.process = true
@@ -724,8 +644,7 @@ function spawnStatisticsInstance(media) {
 
 						media.video.use_subtitle = 'hdmv'
 						media.file.path_new = o.settings.working + `/${media.file.show} Season ${media.file.season_number}/` + media.file.name
-						if (!fs.existsSync(`./${media.file.name}`)) fs.mkdirSync(`./${media.file.show} Season ${media.file.season_number}`)
-
+						if (!fs.existsSync(`./${media.file.show} Season ${media.file.season_number}`)) fs.mkdirSync(`./${media.file.show} Season ${media.file.season_number}`)
 
 					}
 					else throw ("Unknown subtitle: " + line)
@@ -770,35 +689,7 @@ function spawnStatisticsInstance(media) {
 }
 
 /**
- * @param {Object} media
- * @param {String} media.activity - Current activity of the media.
- * @param {Object} media.file
- * @param {String} media.file.name - Name of the file with extension.
- * @param {String} media.file.name_mod - Name of the file without extension.
- * @param {String} media.file.ext - Extension of the file.
- * @param {String} media.file.path - Absolute path of the file.
- * @param {String} media.file.series - Series obtained from file name.
- * @param {String} media.file.episode - Episode obtained from file name.
- * @param {Object} media.video
- * @param {Number} media.video.fps - Current media frames per second.
- * @param {Number} media.video.total_frames - Total amount of frames from the file.
- * @param {String=} media.video.subtitle_map - Subtitle map obtained from statistics.
- * @param {String} media.video.width - Current media width.
- * @param {String} media.video.height - Current media height.
- * @param {String} media.video.ratio - Aspect ratio of the current media.
- * @param {String} media.video.converted_width - Calculated width using the new resolution.
- * @param {String} media.video.converted_height - Calculated height using the new resolution.
- * @param {String} media.video.converted_resolution - Calculated resolution using the new height and width.
- * @param {String} media.video.crop - Adjusted crop based on resolution decision.
- * @param {String} media.video.crf - Quality target determined by presets.
- * @param {Object} media.working
- * @param {Number} media.working.fps - Current processed frames per second.
- * @param {Number} media.working.completed_frames - Amount of completed frames since the start of conversion.
- * @param {Number} media.working.quality - Current quality factor determined by ffmpeg.
- * @param {Number} media.working.bitrate - Average bitrate of processed frames.
- * @param {Number} media.started - Epoch of when the media started.
- * @param {Number} media.ended - Epoch of when the media ended.
- * @param {String[]} media.ffmpeg_argument - Array of ffmpeg arguments.
+ * @param {Media} media
  */
 function spawnConversionInstance(media) {
 
@@ -818,11 +709,13 @@ function spawnConversionInstance(media) {
 
 		media.activity = `Converting`
 
-		if (!encFallback && o.decision.encoder == "nvenc") {  codec = 'hevc_nvenc' }
+		if (!encFallback && o.decision.encoder == "nvenc") { codec = 'hevc_nvenc' }
 		else if ((encFallback && o.decision.encoder == "nvenc") || o.decision.encoder == "hevc") { codec = 'libx265' }
 		else { codec = 'h264' }
 
 		media.ffmpeg_argument = []
+
+		media.ffmpeg_argument.push('-hide_banner')
 
 		media.ffmpeg_argument.push("-threads")
 		media.ffmpeg_argument.push("4")
@@ -852,13 +745,13 @@ function spawnConversionInstance(media) {
 		//Set video codec
 		media.ffmpeg_argument.push("-vcodec")
 		media.ffmpeg_argument.push(codec)
-		
+
 		media.ffmpeg_argument.push("-preset")
 		media.ffmpeg_argument.push("slow")
-		
+
 		media.ffmpeg_argument.push("-level")
 		media.ffmpeg_argument.push("4.1")
-		
+
 		if (o.decision.use_bitrate) {
 
 			media.ffmpeg_argument.push("-b:v")
@@ -873,7 +766,7 @@ function spawnConversionInstance(media) {
 		}
 
 		else if (o.decision.constrain_bitrate) {
-			
+
 			media.ffmpeg_argument.push("-crf")
 			media.ffmpeg_argument.push(media.video.crf)
 			media.ffmpeg_argument.push("-bufsize")
@@ -893,10 +786,10 @@ function spawnConversionInstance(media) {
 		//Set audio codec
 		media.ffmpeg_argument.push("-c:a")
 		media.ffmpeg_argument.push("aac")
-		
+
 		media.ffmpeg_argument.push("-ac")
 		media.ffmpeg_argument.push("2")
-		
+
 		media.ffmpeg_argument.push("-vf")
 		media.ffmpeg_argument.push(`scale=${media.video.converted_resolution}:flags=lanczos${o.decision.crop ? ",crop=" + media.video.crop : ""}`)
 
@@ -937,7 +830,7 @@ function spawnConversionInstance(media) {
 		encode.on('error', function (err) { obj.convert.files[key].processing = "Failed - Ffmpeg Missing"; })
 
 		if (o.debug.convert.file) console.log(media)
-		
+
 		encode.stderr.on('data', (data) => {
 
 			data = data.toString()
@@ -956,7 +849,7 @@ function spawnConversionInstance(media) {
 			else if (/cannot load nvcuda.dll/ig.test(data) || /device type cuda needed for codec/ig.test(data)) {
 
 				encode.kill()
-				
+
 				o.stopValidateOnCodecFail = true;
 
 				setTimeout(() => { return assemble(true, true) }, 500);
@@ -1000,7 +893,7 @@ function spawnConversionInstance(media) {
 					media.process = false
 
 				}
-				
+
 			}
 
 		})
@@ -1009,6 +902,9 @@ function spawnConversionInstance(media) {
 
 }
 
+/**
+ * @param {Media} media
+ */
 function spawnValidationInstance(media) {
 
 	media.process = true
@@ -1080,82 +976,6 @@ function spawnValidationInstance(media) {
 		if (code != null) media.activity = "Finished";
 
 	})
-
-}
-
-function rename(input) {
-
-	//console.log(input)
-
-	let output = {
-		name_with_ext: null,
-		name_without_ext: null,
-		ext: null,
-		show: null,
-		series: null,
-		built: null,
-		season: null,
-		season_number: null,
-		episode: []
-	}
-	// s\d{2})    				 	- Matches s00			  (s and any 2 numbers)
-	// (e|-e|.e)([0-9]+)	     	- Matches e00			  (e variant and any number)
-	// (s\d{2})((e|-e|.e)([0-9]+))+ - Matches s00e00 variants (s, any 2 numbers, e variant, and any number)
-
-	// \d{2}						- Matches 00    		  (any 2 numbers)
-	// (x([0-9]+))					- Matches x00   		  (x and any number)
-	// \d{2}(x([0-9]+))+			- Matches 00x00 		  (any 2 numbers, x, and any number)
-
-	if (/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig.test(input)) {
-
-		output.season = input.match(/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig)[0]
-
-		if (/\d{2}(x([0-9]+))+/.test(output.season)) {
-
-			output.season = output.season.replace(/x/ig, 'e')
-
-			output.season_number = output.season
-			output.season = "s" + output.season
-
-		}
-
-		output.season = output.season.replace(/\.|-/g, '')
-		output.season = output.season.replace(/s/ig, 's')
-		output.season = output.season.replace(/e/ig, 'e')
-		output.season = output.season.trim()
-
-		output.series = output.season.match(/S[0-9]+(?=E)/ig)[0]
-
-		output.season_number = Number(output.series.replace("s", ""))
-
-		output.season.substr(output.season.split(/e/i)[0].length + 1).split(/e/i).forEach((episode, i) => {
-
-			output.episode.push(episode)
-
-			if (i == 0) output.built = `${output.series}e${episode}`
-			else output.built += `-e${episode}`
-
-		})
-
-		output.show = input.replace(/\./g, ' ').match(/(.*)(?=(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+)/ig, '')[0]
-		output.show = output.show.replace(/\[/g, '').trim()
-		output.show = output.show.replace(/-/g, '').trim()
-		
-		output.ext = input.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
-
-		output.name_with_ext = `${output.show.replace('-', '')} - ${output.built}${output.ext}`
-		output.name_without_ext = `${output.show.replace('-', '')} - ${output.built}`
-
-	} else {
-
-		output.name_with_ext = input
-
-		output.ext = input.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
-		output.name_without_ext = input.replace(output.ext, "")
-
-	}
-
-	return output;
 
 }
 
@@ -1257,5 +1077,121 @@ function help() {
 		`   ${chalk.blue("-trim:")}[${chalk.blue("hh:mm:ss,hh:mm:ss")}]   - Trim the media.\n`
 
 	)
+
+}
+
+class Media {
+
+	constructor(name, path) {
+
+		this.activity = "Waiting";
+		this.name = name;
+		this.path = path;
+
+		this.file = {
+
+			name: name,
+			name_mod: "",
+			name_new: "",
+			ext: "",
+			size: 0,
+			new_size: 0,
+			val_size: 0,
+			path: path,
+			path_new: "",
+			show: "",
+			series: "",
+			season_number: 0,
+			episode: []
+
+		}
+
+		this.video = {
+
+			fps: 0,
+			total_frames: 0,
+			subtitle_map: "",
+			width: "",
+			height: "",
+			ratio: "",
+			converted_width: "",
+			converted_height: "",
+			converted_resolution: "",
+			crop: "",
+			crf: ""
+
+		}
+
+		this.working = {
+
+			fps: 0,
+			completed_frames: 0,
+			quality: 0,
+			bitrate: 0
+
+		}
+
+		this.started = 0;
+		this.ended = 0;
+		this.ffmpeg_argument = []
+
+		this.process = false;
+
+	}
+
+	rename() {
+
+		if (/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig.test(this.file.name)) {
+
+			let season = this.file.name.match(/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig)[0]
+			let built;
+
+			if (/\d{2}(x([0-9]+))+/.test(season)) {
+
+				season = season.replace(/x/ig, 'e')
+
+				season = "s" + season
+
+			}
+
+			season = season.replace(/\.|-/g, '')
+				.replace(/s/ig, 's')
+				.replace(/e/ig, 'e')
+				.trim()
+
+			this.file.series = season.match(/S[0-9]+(?=E)/ig)[0]
+
+			this.file.season_number = Number(this.file.series.replace("s", ""))
+
+			season.substr(season.split(/e/i)[0].length + 1).split(/e/i).forEach((episode, i) => {
+
+				this.file.episode.push(episode)
+
+				if (i == 0) built = `${this.file.series}e${episode}`
+				else built += `-e${episode}`
+
+			})
+
+			this.file.show = this.file.name.replace(/\./g, ' ')
+				.match(/(.*)(?=(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+)/ig, '')[0]
+				.replace(/\[/g, '').trim()
+				.replace(/-/g, '').trim()
+
+			this.file.ext = this.file.name.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
+
+			this.file.name = `${this.file.show.replace('-', '')} - ${built}${this.file.ext}`
+			this.file.name_mod = `${this.file.show.replace('-', '')} - ${built}`
+
+		} else {
+
+			this.file.ext = this.file.name.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
+			this.file.name_mod = this.file.name.replace(this.file.ext, "")
+
+		}
+
+		this.file.path = o.settings.working + "/" + this.file.name
+		this.file.name_new = this.file.name_mod + ".mp4"
+
+	}
 
 }
