@@ -71,9 +71,6 @@ let o = {
 // Parse arguments provided to the script
 process.argv.forEach(arg => {
 
-	// Set encoder if provided and is included in the list of available encoders
-	if (o.settings.encoders.includes(arg)) o.decision.encoder = arg;
-
 	// Set amount of transcodes to run in parallel
 	if (!isNaN(arg)) o.decision.amount = Number(arg);
 
@@ -756,9 +753,6 @@ function help() {
 		`\n` +
 		`Amount:\n` +
 		`   Amount of media to convert at once.\n` +
-		`\n` +
-		`Codec:\n` +
-		`   One of the pre-configured codecs [${chalk.blue("hevc")}, ${chalk.blue("nvenc")}, ${chalk.blue("h264")}]\n` +
 		`\n`
 
 	)

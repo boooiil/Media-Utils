@@ -8,9 +8,6 @@ Usage: redesign.js [amount] [codec]
 
 Amount:
    Amount of media to convert at once.
-
-Codec:
-   One of the pre-configured codecs [hevc, nvenc, h264]
 ```
 
 ## anime_rename.js
