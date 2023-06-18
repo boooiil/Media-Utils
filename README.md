@@ -85,7 +85,7 @@ Input:
         Subtitles: English, Japanese
 
 Output:
-    Series.Name - s01e01.mp4
+    Series Name - s01e01.mp4
         Codec: x265
         Bitrate: ~0.8-1.7 Mbps
         Resolution: 1280x720
