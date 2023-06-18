@@ -681,7 +681,7 @@ function overlook() {
 /**
  * The function spawns an instance of FFProbe to extract statistics from a media file and assigns the
  * extracted data to properties of a media object.
- * @param media - The media object that contains information about the media file being processed, such
+ * @param {Media} media - The media object that contains information about the media file being processed, such
  * as its path, resolution, and subtitle information.
  */
 function spawnStatisticsInstance(media) {
@@ -811,7 +811,7 @@ function spawnStatisticsInstance(media) {
 
 /**
  * This function spawns a new FFmpeg instance to convert a video file.
- * @param media - an object containing information about the media file being converted, including its
+ * @param {Media} media - an object containing information about the media file being converted, including its
  * path, video and audio codecs, resolution, and other settings.
  */
 function spawnConversionInstance(media) {
@@ -829,9 +829,6 @@ function spawnConversionInstance(media) {
 	 * GPU decoding is not available.
 	 */
 	function assemble(encFallback, decFallback) {
-
-		//Do better logging to display what encoder and decoder we are using. 
-		//This will be displayed in the top bar with the time and other information. 
 
 		let codec;
 
@@ -1066,7 +1063,7 @@ function spawnConversionInstance(media) {
 
 /**
  * This function validates a media file using FFmpeg and updates its properties accordingly.
- * @param media - The media object that contains information about the file being validated and its
+ * @param {Media} media - The media object that contains information about the file being validated and its
  * processing status.
  * @returns Nothing is being returned explicitly in this function. However, the function may modify the
  * `media` object and update its `activity` property to "Finished" or one of the "Failed" statuses.
