@@ -1,8 +1,28 @@
-const fs = require("fs");
+const { stat, existsSync, readdirSync, renameSync, rmSync, unlinkSync, mkdirSync } = require("fs");
 const path = require("path")
 const child = require('child_process');
 const { exit } = require("process");
 
+/**
+ * SCREEN:
+ * [TIME] [AMOUNT] [TARGET ENC] [ENCODER] [DECODER] [TUNE] [RESOLUTION] [DEBUG?] [CROP?]
+ * 
+ * [FILE_1] [ACTIVITY (Converting)] [START_TIME] [PROGRESS] [QUALITY] [BITRATE] [SPEED] [ETA]
+ * [FILE_2] [ACTIVITY (Waiting)] [START_TIME] [PROGRESS] [QUALITY] [BITRATE] [SPEED] [ETA]
+ * 
+ * PROCESS:
+ * 
+ * current: { Media, ... }
+ * files: [ { Media, ... }, { Media, ... }, ... ]
+ * 
+ * FILE ARRAY:
+ * 
+ * files: [ { Media (Waiting) }, { Media (Waiting) }, { Media (Finished) }, ... ]
+ */
+
+
+
+// Color console output
 let chalk = {
 
 	red: (string) => { return "\x1b[38;2;255;128;128m" + string + "\x1b[0m" },
@@ -26,11 +46,12 @@ let o = {
 		trim: null,
 		crf_override: null,
 		use_bitrate: null,
-		constrain_bitrate: null
+		constrain_bitrate: null,
+		novalidate: null
 	},
 	settings: {
 		working: process.cwd(),
-		validate: "//192.168.0.12/T/",
+		validate: process.platform == "linux" ? "/media/T/" : "//127.0.0.1/T/",
 		encoders: ["h264", "hevc", "nvenc"],
 		tune_1: ["film", "grain"],
 		tune_2: ["animate", "animation", "anime"],
@@ -183,31 +204,60 @@ let o = {
 	}
 }
 
+// Parse arguments provided to the script
 process.argv.forEach(arg => {
 
+	// Set quality to string matching {number}p
 	if (/^[0-9]+p/.test(arg)) o.decision.quality = arg;
 
+	// Set encoder if provided and is included in the list of available encoders
 	if (o.settings.encoders.includes(arg)) o.decision.encoder = arg;
+
+	// Set tune if provided and is included in the list of available tunes
 	if (o.settings.tune_1.includes(arg)) o.decision.tune = arg;
 	if (o.settings.tune_2.includes(arg)) o.decision.tune = "animation";
 
+	// Set amount of transcodes to run in parallel
 	if (!isNaN(arg)) o.decision.amount = Number(arg);
 
+	// Enable debug mode
 	if (arg == "debug") o.debug.toggle = true;
+
+	// Enable video cropping
 	if (arg == "crop") o.decision.crop = true;
 
+	// Enable beginning trimming
 	if (arg.includes("-skip-beginning:")) o.decision.start_beginning = arg.replace("-skip-beginning:", "")
+
+	// Override default validate directory
 	if (arg.includes("-validate:")) o.settings.validate = arg.replace("-validate:", "")
+
+	// Override CRF value
 	if (arg.includes("-crf:")) o.decision.crf_override = arg.replace("-crf:", "")
+
+	// Enable range trimming
 	if (arg.includes("-trim:")) o.decision.trim = arg.replace("-trim:", "")
+
+	// Enable bitrate instead of CRF mode
 	if (arg.includes("-bitrate")) o.decision.use_bitrate = true;
+
+	// Enable bitrate constraint
 	if (arg.includes("-constrain")) o.decision.constrain_bitrate = true;
+
+	// Skip validation on completion
+	if (arg.includes("-novalidate")) o.decision.novalidate = true;
+
+	// Print help message
 	if (arg.includes("-help")) o.decision.help = true;
 
 })
 
+// Print help message and exit
 if (o.decision.help) { help(); exit(); }
 
+
+// If quality is provided but not included in the list of available qualities, 
+// try to create a custom quality
 if (o.decision.quality && !o.settings.formats[o.decision.quality]) {
 
 	if (o.decision.use_bitrate) {
@@ -216,6 +266,7 @@ if (o.decision.quality && !o.settings.formats[o.decision.quality]) {
 
 	}
 
+	// Create a new format object for the custom quality
 	o.settings.formats[o.decision.quality] = {
 		crf: 24,
 		width: null,
@@ -226,37 +277,44 @@ if (o.decision.quality && !o.settings.formats[o.decision.quality]) {
 
 	let custom = o.settings.formats[o.decision.quality]
 
+	// Calculate the width and height of the custom quality
 	if (custom.height % 2 != 0) custom.height++
 
 	custom.width = Math.ceil(custom.height * 1.777777777777778)
 
+	// Make sure the width is even else ffmpeg will throw an error
 	if (custom.width % 2 != 0) custom.width++
 
 	let adjusted = Math.ceil(custom.width / 2.4)
 
+	// Make sure the crop value is even else ffmpeg will throw an error
 	if (adjusted % 2 != 0) adjusted++
 
 	custom.crop = custom.width + ":" + adjusted
 	custom.scale = custom.width + ":" + custom.height
 
 }
+
+// If quality is not provided, set it to 720p
 else if (!o.decision.quality) {
 
 	o.decision.quality = "720p"
-	//console.log(process.argv); return console.log(chalk.red("Quality was not found.")); 
 
 }
 
+// If crf override is provided, set it to the provided value
 if (o.decision.crf_override) {
 
 	o.settings.formats[o.decision.quality].crf = o.decision.crf_override
 
 }
 
+// Set decision values to default if not provided
 if (!o.decision.encoder) o.decision.encoder = "hevc";
 if (!o.decision.amount) o.decision.amount = 1;
 if (!o.decision.tune) o.decision.tune = "film"
 
+// Print debug information if debug mode is enabled
 if (o.debug.toggle) {
 
 	debug_prefix = chalk.red("[DEBUG]")
@@ -287,10 +345,7 @@ if (o.debug.toggle) {
 
 Notes:
 
-	* Have the media get put back into the array and just check if the key "ended" is not null in the next object of the array.
-	* If the next item has the key, end the script as we have completed the full loop.
-
-	* We will likely have to create our own sort function.
+	* I changed my mind, I don't wanna
 
 */
 
@@ -298,26 +353,35 @@ main()
 
 function main() {
 
-	let directory = fs.readdirSync(o.settings.working)
+	// Get the list of files in the working directory
+	let directory = readdirSync(o.settings.working)
 
+	// Iterate through each file in the working directory
 	directory.forEach(file => {
 
-		fs.stat(file, (err, stat) => {
+		// Get the file's stats
+		stat(file, (err, stat) => {
 
+			// If the file is a file, and it's an mkv or avi file
 			if (stat.isFile() && (file.includes(".mkv") || file.includes(".avi"))) {
 
+				// Create a new media object
 				let media = new Media(file, o.settings.working + "/" + file)
 
+				// Rename the file
 				media.rename()
 
+				// Get the file's size from its stats
 				media.file.size = stat.size;
+
+				// Set the path of the renamed file
 				media.file.path_new = o.settings.working + "/" + media.file.name_new;
 
-				if (o.debug.toggle) console.log(debug_prefix, chalk.red(" -- Media File -- "))
-				if (o.debug.toggle) console.log(debug_prefix, chalk.blue("Media File:"), chalk.gray(file))
-
+				// Print debug information if debug mode is enabled
 				if (o.debug.toggle) {
 
+					console.log(debug_prefix, chalk.red(" -- Media File -- "))
+					console.log(debug_prefix, chalk.blue("Media File:"), chalk.gray(file))
 					console.log(debug_prefix, chalk.blue("Name:"), chalk.gray(media.file.name))
 					console.log(debug_prefix, chalk.blue("Modified Name:"), chalk.gray(media.file.name_mod))
 					console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(media.file.name_new))
@@ -330,40 +394,52 @@ function main() {
 					console.log(debug_prefix, chalk.red(" -- Media File -- \n"))
 
 				}
-				if (media.file.name != file) fs.renameSync(`./${file}`, media.file.name)
 
+				// If the file name is different than the new name, rename it on disk
+				if (media.file.name != file) renameSync(`./${file}`, media.file.name)
+
+				// Push the file to the media array
 				o.files.push(media)
 
 			}
 
+			// If the file is a directory, and it's a subtitle directory
 			else if (stat.isDirectory() && file.toLowerCase().includes("sub")) {
-
 
 				if (o.debug.toggle) console.log(debug_prefix, chalk.blue("Subtitle:"), chalk.gray(file))
 
-				fs.readdirSync(o.settings.working + "/" + file).forEach(subtitle => {
+				// Iterate through each subtitle file in the subtitle directory
+				readdirSync(o.settings.working + "/" + file).forEach(subtitle => {
 
+					// If the subtitle is an idx or sub file
 					if (/.idx|.sub/.test(subtitle)) {
 
+						// Create a new media object
 						let media = new Media(subtitle, o.settings.working + "/" + file + "/" + subtitle)
 
+						// Rename the subtitle
 						media.rename()
 
 						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(media.file.name))
 
-						fs.renameSync(o.settings.working + "/" + file + "/" + subtitle, o.settings.working + "/" + media.file.name)
+						// Rename the subtitle on disk
+						renameSync(o.settings.working + "/" + file + "/" + subtitle, o.settings.working + "/" + media.file.name)
 
 					}
 
+					// If the subtitle is an srt file
 					else if (/.srt/.test(subtitle)) {
 
+						// Create a new media object
 						let media = new Media(subtitle, o.settings.working + "/" + file + "/" + subtitle)
 
+						// Rename the subtitle
 						media.rename()
 
 						if (o.debug.toggle) console.log(debug_prefix, chalk.blue("New Name:"), chalk.gray(media.file.name))
 
-						fs.renameSync(o.settings.working + "/" + file + "/" + subtitle, o.settings.working + "/" + media.file.name.replace(media.file.ext, "") + ".en" + media.file.ext)
+						// Rename the subtitle on disk
+						renameSync(o.settings.working + "/" + file + "/" + subtitle, o.settings.working + "/" + media.file.name.replace(media.file.ext, "") + ".en" + media.file.ext)
 
 					}
 
@@ -372,7 +448,8 @@ function main() {
 
 			}
 
-			if (path.extname(file) == ".txt" || path.extname(file) == ".nfo" || path.extname(file) == ".exe") fs.rmSync(file)
+			// If the file extension is .txt, .nfo, or .exe, delete it
+			if (path.extname(file) == ".txt" || path.extname(file) == ".nfo" || path.extname(file) == ".exe") rmSync(file)
 
 		})
 	})
@@ -382,6 +459,9 @@ function main() {
 
 }
 
+/**
+ * The function updates the console screen with information about the current media conversion process.
+ */
 function updateScreen() {
 
 	//Attempt to hide the cursor in the console.
@@ -404,6 +484,7 @@ function updateScreen() {
 		let debug = o.debug.toggle ? ob + chalk.red("DEBUG") + cb + " " : ""
 		let crop = o.decision.crop ? ob + chalk.red("CROP") + cb + " " : ""
 
+		// If the debug toggle is off, continue to update the console screen.
 		if (!o.debug.toggle) {
 
 			//Clear the current console output.
@@ -415,6 +496,7 @@ function updateScreen() {
 			//Get info for currently converting media.
 			Object.keys(o.current).forEach((media, index) => {
 
+				// Set the media object to the current media object
 				media = o.current[media]
 
 				let file_name = `${ob + chalk.blue("FILE") + cb} ${chalk.gray(media.file.name_mod)}`
@@ -444,6 +526,9 @@ function updateScreen() {
 					let p = `| PCT: ${Math.ceil((completed_frames / total_frames) * 100)}% `
 					let q = `| QLT: ${media.working.quality} `
 
+					/* The above code sets the title of the current Node.js process to a string that is constructed
+					using the values of the variables `f`, `a`, `q`, `b`, and `e`. The resulting title will be
+					displayed in the terminal or console window where the process is running. */
 					process.title = `${f} ${a}${q}${b}${e}`
 
 				}
@@ -468,6 +553,7 @@ function updateScreen() {
 
 				if (media.activity == "Finished" || media.activity.includes("Failed")) {
 
+					// Calculate the percentage of the file size that was reduced.
 					let calculated = Math.floor(((media.file.size - media.file.new_size) / media.file.size) * 100)
 
 					let ended = `${ob + chalk.blue("COMPLETION") + cb} ${chalk.gray(time(media.ended))}`
@@ -482,11 +568,10 @@ function updateScreen() {
 
 			})
 
+			//Log the output array.
 			output.forEach(line => console.log(line))
 
 		} else {
-
-
 
 			//DEBUG INFORMATION GOES HERE
 			//console.log(o.current ? o.current.file : null)
@@ -511,13 +596,15 @@ function updateScreen() {
 
 }
 
+/**
+ * The function oversees the transcoding process by managing the queue of media files and spawning
+ * instances for statistics, extraction, conversion, and validation.
+ */
 function overlook() {
 
 	setInterval(() => {
 
 		let current_amount = Object.keys(o.current).length
-
-		//console.log(current_amount, o.decision.amount)
 
 		if (current_amount < o.decision.amount) {
 
@@ -526,6 +613,7 @@ function overlook() {
 			 */
 			let next = o.files.shift()
 
+			// If there are no more files to process, exit the process.
 			if (!next || next.activity == "Validated" || next.activity.includes("Failed") || next.activity == "Finished") {
 
 				if (current_amount == 0) process.exit()
@@ -536,12 +624,14 @@ function overlook() {
 				next.activity = "Statistics"
 				next.started = new Date().getTime()
 
+				// Add the file to the current queue.
 				o.current[next.file.name_mod] = next
 
 			}
 
 		}
 
+		// If the current amount of transcoding instances is greater than the allowed amount, exit the process.
 		if (current_amount > o.decision.amount) {
 
 			console.error("CURRENT TRANSCODES ARE GREATER THAN THE ALLOWED AMOUNT.")
@@ -552,6 +642,7 @@ function overlook() {
 
 		}
 
+		// Iterate through the current queue and spawn instances for each file.
 		Object.keys(o.current).forEach(file => {
 
 			/**
@@ -559,6 +650,7 @@ function overlook() {
 			 */
 			let media = o.current[file]
 
+			// If the file is not being processed, spawn an instance for it.
 			if (!media.process) {
 
 				if (media.activity.includes("Statistics")) spawnStatisticsInstance(media)
@@ -568,6 +660,7 @@ function overlook() {
 
 			}
 
+			// If the file has finished processing, add it to the completed queue.
 			if (media.activity == "Finished" || media.activity.includes("Failed")) {
 
 				media.ended = new Date().getTime()
@@ -584,13 +677,25 @@ function overlook() {
 
 }
 
+
 /**
- * @param {Media} media
+ * The function spawns an instance of FFProbe to extract statistics from a media file and assigns the
+ * extracted data to properties of a media object.
+ * @param media - The media object that contains information about the media file being processed, such
+ * as its path, resolution, and subtitle information.
  */
 function spawnStatisticsInstance(media) {
 
+	/**
+	 * This is just full of dummy regex expressions that need to be optimized.
+	 * 
+	 * If you can understand it all, props.
+	 * I hate every second of it.
+	 */
+
 	media.process = true
 
+	// Spawn an instance of FFProbe to get the statistics of the file.
 	child.exec(`ffprobe -hide_banner -i "${media.file.path}"`, { encoding: 'UTF-8', windowsHide: true, shell: false }, (err, stdout, data) => {
 
 		if (err) { console.log(o.current); throw err; }
@@ -644,24 +749,39 @@ function spawnStatisticsInstance(media) {
 
 						media.video.use_subtitle = 'hdmv'
 						media.file.path_new = o.settings.working + `/${media.file.show} Season ${media.file.season_number}/` + media.file.name
-						if (!fs.existsSync(`./${media.file.show} Season ${media.file.season_number}`)) fs.mkdirSync(`./${media.file.show} Season ${media.file.season_number}`)
+						if (!existsSync(`./${media.file.show} Season ${media.file.season_number}`)) {
+
+							mkdirSync(`./${media.file.show} Season ${media.file.season_number}`, { recursive: true })
+
+						}
 
 					}
 					else throw ("Unknown subtitle: " + line)
-					//if (line.match(/(?<=stream #)(.*)(?=\(eng\))/gm) != undefined) media.video.subtitle_map = line.match(/(?<=stream #)(.*)(?=\(eng\))/gm)[0]
-					//else throw new Error(`[ERROR] Subtitle was found but no mapping could be obtained: ${line}`)
 
 				}
 			})
 
-		} else media.video.use_subtitle = false;
 
+		}
+
+		// If there are no subtitles, don't use them.
+		else media.video.use_subtitle = false;
+
+		// Get the rest of the attachments in the video, generally going to be burnt-in subtitles.
 		if (/(?=.*[A-a]ttachment: )(.*)(?=)/gm.test(data)) {
 
+			// Set subtitle format to ass (Aegisub)
 			if (media.video.use_subtitle && media.video.use_subtitle == "mov") media.video.use_subtitle = "ass"
 
+			// Set new path since we cannot use .mp4 because of the subtitle format
 			media.file.path_new = o.settings.working + `/${media.file.show} Season ${media.file.season_number}/` + media.file.name
-			if (!fs.existsSync(`./${media.file.show} Season ${media.file.season_number}`)) fs.mkdirSync(`./${media.file.show} Season ${media.file.season_number}`)
+
+			// If the directory does not exist, create it
+			if (!existsSync(`./${media.file.show} Season ${media.file.season_number}`)) {
+
+				mkdirSync(`./${media.file.show} Season ${media.file.season_number}`, { recursive: true })
+
+			}
 
 		}
 
@@ -688,8 +808,11 @@ function spawnStatisticsInstance(media) {
 
 }
 
+
 /**
- * @param {Media} media
+ * This function spawns a new FFmpeg instance to convert a video file.
+ * @param media - an object containing information about the media file being converted, including its
+ * path, video and audio codecs, resolution, and other settings.
  */
 function spawnConversionInstance(media) {
 
@@ -697,6 +820,14 @@ function spawnConversionInstance(media) {
 
 	assemble()
 
+	/**
+	 * This function assembles FFmpeg arguments for video conversion, taking into account hardware
+	 * acceleration and codec decisions.
+	 * @param {boolean} encFallback - A boolean value indicating whether to use a fallback encoder if the primary
+	 * encoder fails.
+	 * @param {boolean} decFallback - A boolean value indicating whether to use CPU decoding as a fallback option if
+	 * GPU decoding is not available.
+	 */
 	function assemble(encFallback, decFallback) {
 
 		//Do better logging to display what encoder and decoder we are using. 
@@ -709,6 +840,8 @@ function spawnConversionInstance(media) {
 
 		media.activity = `Converting`
 
+		// If the encoder is nvenc, use the hevc_nvenc codec. If the encoder is hevc, use the libx265 codec.
+		// Fallback to h264 if the encoder fails.
 		if (!encFallback && o.decision.encoder == "nvenc") { codec = 'hevc_nvenc' }
 		else if ((encFallback && o.decision.encoder == "nvenc") || o.decision.encoder == "hevc") { codec = 'libx265' }
 		else { codec = 'h264' }
@@ -716,9 +849,6 @@ function spawnConversionInstance(media) {
 		media.ffmpeg_argument = []
 
 		media.ffmpeg_argument.push('-hide_banner')
-
-		media.ffmpeg_argument.push("-threads")
-		media.ffmpeg_argument.push("4")
 
 		//Use hardware decoding
 		if (!decFallback) media.ffmpeg_argument.push("-hwaccel")
@@ -752,6 +882,7 @@ function spawnConversionInstance(media) {
 		media.ffmpeg_argument.push("-level")
 		media.ffmpeg_argument.push("4.1")
 
+		// Use format bitrates
 		if (o.decision.use_bitrate) {
 
 			media.ffmpeg_argument.push("-b:v")
@@ -765,6 +896,7 @@ function spawnConversionInstance(media) {
 
 		}
 
+		// Use constrained quality
 		else if (o.decision.constrain_bitrate) {
 
 			media.ffmpeg_argument.push("-crf")
@@ -776,6 +908,7 @@ function spawnConversionInstance(media) {
 
 		}
 
+		// Else use format CRF
 		else {
 
 			media.ffmpeg_argument.push("-crf")
@@ -783,13 +916,15 @@ function spawnConversionInstance(media) {
 
 		}
 
-		//Set audio codec
+		// Set audio codec
 		media.ffmpeg_argument.push("-c:a")
 		media.ffmpeg_argument.push("aac")
 
+		// Set two audio channels
 		media.ffmpeg_argument.push("-ac")
 		media.ffmpeg_argument.push("2")
 
+		// Set video scale, deinterlace, and crop
 		media.ffmpeg_argument.push("-vf")
 		media.ffmpeg_argument.push(`scale=${media.video.converted_resolution}:flags=lanczos${o.decision.crop ? ",crop=" + media.video.crop : ""}`)
 
@@ -817,16 +952,34 @@ function spawnConversionInstance(media) {
 		//Write
 		media.ffmpeg_argument.push(media.file.path_new)
 
+		// If debug is enabled, log the built argument as it is passed to the console
+		if (o.debug.toggle) {
+
+			let built = ""
+
+			for (const argument of media.ffmpeg_argument) {
+
+				built += `${argument} `;
+
+			}
+
+			console.log(debug_prefix, chalk.blue("Built Arguments:"), chalk.gray(built))
+
+		}
+
 		convert()
 
 	}
 
 	function convert() {
 
+		// Prevent media from being validated if there is a codec failure
 		o.stopValidateOnCodecFail = false;
 
+		// Spawn ffmpeg
 		let encode = child.spawn('ffmpeg', media.ffmpeg_argument, { encoding: 'UTF-8', windowsHide: true, shell: false })
 
+		// If command failure, set process status to failed
 		encode.on('error', function (err) { obj.convert.files[key].processing = "Failed - Ffmpeg Missing"; })
 
 		if (o.debug.convert.file) console.log(media)
@@ -837,6 +990,7 @@ function spawnConversionInstance(media) {
 
 			if (o.debug.convert.data) console.log(data)
 
+			// If the encoder is used already or the encoder is not found, kill the process and try again
 			if (/openencodesessionex failed: out of memory/ig.test(data) || /no capable devices found/ig.test(data)) {
 
 				encode.kill()
@@ -846,6 +1000,8 @@ function spawnConversionInstance(media) {
 				setTimeout(() => { return assemble(true) }, 500);
 
 			}
+
+			// If there is no nvidia card, kill the process and try again using the fallback encoder
 			else if (/cannot load nvcuda.dll/ig.test(data) || /device type cuda needed for codec/ig.test(data)) {
 
 				encode.kill()
@@ -855,13 +1011,18 @@ function spawnConversionInstance(media) {
 				setTimeout(() => { return assemble(true, true) }, 500);
 
 			}
+
+			// If the file is already encoded, set the process status to validating
 			else if (/already exists/ig.test(data)) {
 
 				media.activity = "Validating"
 				media.process = false
 
 			}
+
 			else {
+
+				// Get the converted frame amount and fps
 				if (/(?<=frame=)(.*)(?=fps)/g.test(data)) {
 
 					let quality = data.match(/(?<=q=)(.*?)(?= )/g)
@@ -902,17 +1063,28 @@ function spawnConversionInstance(media) {
 
 }
 
+
 /**
- * @param {Media} media
+ * This function validates a media file using FFmpeg and updates its properties accordingly.
+ * @param media - The media object that contains information about the file being validated and its
+ * processing status.
+ * @returns Nothing is being returned explicitly in this function. However, the function may modify the
+ * `media` object and update its `activity` property to "Finished" or one of the "Failed" statuses.
  */
 function spawnValidationInstance(media) {
 
 	media.process = true
 
-	if (!fs.existsSync(o.settings.validate + 'Testing')) fs.mkdirSync(o.settings.validate + 'Testing')
+	// If the novalidate flag is enabled, set the process status to finished
+	if (o.decision.novalidate) { media.activity = "Finished"; return }
 
+	// If the testing directory does not exist, create it
+	if (!existsSync(o.settings.validate + 'Testing')) mkdirSync(o.settings.validate + 'Testing', { recursive: true })
+
+	// Spawn ffmpeg
 	let validate = child.spawn('ffmpeg', ['-hide_banner', '-i', `${media.file.path_new}`, '-c:v', 'copy', '-c:a', 'copy', o.settings.validate + `Testing/${media.file.name_new}`, '-y'], { encoding: 'UTF-8', windowsHide: true, shell: false })
 
+	// If command failure, set process status to failed
 	validate.on('error', function (err) { media.activity = "Failed - Ffmpeg Missing"; })
 
 	validate.stderr.on('data', (data) => {
@@ -922,6 +1094,7 @@ function spawnValidationInstance(media) {
 		if (o.debug.validate.data) console.log(data)
 		if (o.debug.validate.file) console.log(media)
 
+		// Get the converted frame amount and fps
 		if (/(?<=frame=)(.*)(?=fps)/g.test(data)) {
 
 			let quality = data.match(/(?<=q=)(.*?)(?= )/g)
@@ -942,27 +1115,31 @@ function spawnValidationInstance(media) {
 
 		}
 
+		// If ffmpeg returns corrupt or invalid data, set the process status to failed
 		if (/corrupt/ig.test(data) || /invalid data found/ig.test(data)) {
 
 			media.activity = "Failed - File Corrupt";
 
+			// Delete the testing file
 			if (media.video.use_subtitle == 'hdmv') {
-				if (fs.existsSync(o.settings.validate + `Testing/${media.file.name}`)) fs.unlinkSync(o.settings.validate + `Testing/${media.file.name}`)
+				if (existsSync(o.settings.validate + `Testing/${media.file.name}`)) unlinkSync(o.settings.validate + `Testing/${media.file.name}`)
 			}
-			else if (fs.existsSync(o.settings.validate + `Testing/${media.file.name_new}`)) fs.unlinkSync(o.settings.validate + `Testing/${media.file.name_new}`)
+			else if (existsSync(o.settings.validate + `Testing/${media.file.name_new}`)) unlinkSync(o.settings.validate + `Testing/${media.file.name_new}`)
 
 			validate.kill()
 
 		}
 
+		// If ffmpeg returns invalid arguments, set the process status to failed
 		else if (/invalid argument/ig.test(data)) {
 
 			media.activity = "Failed - FFmpeg Arguments Invalid";
 
+			// Delete the testing file
 			if (media.video.use_subtitle == 'hdmv') {
-				if (fs.existsSync(o.settings.validate + `Testing/${media.file.name}`)) fs.unlinkSync(o.settings.validate + `Testing/${media.file.name}`)
+				if (existsSync(o.settings.validate + `Testing/${media.file.name}`)) unlinkSync(o.settings.validate + `Testing/${media.file.name}`)
 			}
-			else if (fs.existsSync(o.settings.validate + `Testing/${media.file.name_new}`)) fs.unlinkSync(o.settings.validate + `Testing/${media.file.name_new}`)
+			else if (existsSync(o.settings.validate + `Testing/${media.file.name_new}`)) unlinkSync(o.settings.validate + `Testing/${media.file.name_new}`)
 
 			validate.kill()
 
@@ -971,7 +1148,8 @@ function spawnValidationInstance(media) {
 
 	validate.on('exit', (code) => {
 
-		if (fs.existsSync(o.settings.validate + `Testing/${media.file.name_new}`)) fs.unlinkSync(o.settings.validate + `Testing/${media.file.name_new}`)
+		// Delete the testing file
+		if (existsSync(o.settings.validate + `Testing/${media.file.name_new}`)) unlinkSync(o.settings.validate + `Testing/${media.file.name_new}`)
 
 		if (code != null) media.activity = "Finished";
 
@@ -979,6 +1157,12 @@ function spawnValidationInstance(media) {
 
 }
 
+/**
+ * Get a timestamp in the format of HH:MM:SS-AM/PM - MM/DD/YYYY
+ * @param {number} value 
+ * @param {any} type 
+ * @returns 
+ */
 function time(value, type) {
 
 	if (value == null) {
@@ -1038,6 +1222,12 @@ function time(value, type) {
 	}
 }
 
+/**
+ * The function provides help documentation for a command line tool called "redesign.js".
+ * @returns a console log message with instructions on how to use a command line tool called
+ * "redesign.js". The message includes information on the required and optional arguments, as well as
+ * special formats and overrides that can be used with the tool.
+ */
 function help() {
 
 	return console.log(
@@ -1074,14 +1264,23 @@ function help() {
 		`   ${chalk.blue("-skip-beginning:")}[${chalk.blue("hh:mm:ss")}]  - Skip the beginning by specified amount of time.\n` +
 		`   ${chalk.blue("-crf:")}[${chalk.blue("crf")}]  - Override the CRF value for the current media.\n` +
 		`   ${chalk.blue("-validate:")}[${chalk.blue("dir")}]  - Override the validation directory\n` +
-		`   ${chalk.blue("-trim:")}[${chalk.blue("hh:mm:ss,hh:mm:ss")}]   - Trim the media.\n`
+		`   ${chalk.blue("-trim:")}[${chalk.blue("hh:mm:ss,hh:mm:ss")}]   - Trim the media.\n` +
+		`   ${chalk.blue("-novalidate:")}  - Skip validation .\n`
 
 	)
 
 }
 
+/* The Media class contains properties and methods for handling media files, including renaming and
+setting file information. */
 class Media {
 
+	/**
+	 * This is a constructor function that initializes various properties related to a file and video
+	 * processing.
+	 * @param {string} name - The name of the file being processed.
+	 * @param {string} path - The path of the file being processed.
+	 */
 	constructor(name, path) {
 
 		this.activity = "Waiting";
@@ -1139,16 +1338,19 @@ class Media {
 
 	}
 
+	/**
+	 * The function renames files based on their season and episode numbers and updates their file path
+	 * and name.
+	 */
 	rename() {
 
-		//Change regex into blocks that we can select so that we can easily extract episode and season
+		// Check if filename contains s{number}e{number} or {number}x{number} format
+		if (/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig.test(this.file.name)) {
 
-		if (/s\d{2}((e|-e|.e)(\d{2,}))+|\d{2}(x(\d{2,}))+/ig.test(this.file.name)) {
-
-			let season = this.file.name.match(/s\d{2}((e|-e|.e)(\d{2,}))+|\d{2}(x(\d{2,}))+/ig)[0]
+			let season = this.file.name.match(/(s\d{2})((e|-e|.e)([0-9]+))+|\d{2}(x([0-9]+))+/ig)[0]
 			let built;
 
-			if (/\d{2}(x(\d{2,}))+/.test(season)) {
+			if (/\d{2}(x([0-9]+))+/.test(season)) {
 
 				season = season.replace(/x/ig, 'e')
 
@@ -1179,14 +1381,14 @@ class Media {
 				.replace(/\[/g, '').trim()
 				.replace(/-/g, '').trim()
 
-			this.file.ext = this.file.name.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
+			this.file.ext = this.file.name.match(/\.srt|\.mkv|\.avi|\.idx|\.sub/)[0]
 
 			this.file.name = `${this.file.show.replace('-', '')} - ${built}${this.file.ext}`
 			this.file.name_mod = `${this.file.show.replace('-', '')} - ${built}`
 
 		} else {
 
-			this.file.ext = this.file.name.match(/.srt|.mkv|.avi|.idx|.sub/)[0]
+			this.file.ext = this.file.name.match(/\.srt|\.mkv|\.avi|\.idx|\.sub/)[0]
 			this.file.name_mod = this.file.name.replace(this.file.ext, "")
 
 		}
