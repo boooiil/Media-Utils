@@ -43,7 +43,7 @@ Usage: redesign.js [resolution] [amount] [codec] [tune] [overrides]
 
 Resolution:
    Configured: [2160p, 1440p, 1080pn, 720p, 480p] 
-   
+
    Custom: <value>p
 
    Special Formats:
@@ -70,4 +70,27 @@ Overrides:
    -validate:[dir]  - Override the validation directory
    -trim:[hh:mm:ss,hh:mm:ss]   - Trim the media.
    -novalidate:  - Skip validation.
+```
+
+Example Input/Output:
+```
+Command: node redesign.js 
+
+Input: 
+    Series.Name.S01E01.Episode.Name.mkv
+        Codec: h264
+        Bitrate: 15.0 Mbps
+        Resolution: 1920x1080
+        Audio: English (5.1), Japanese (2.1)
+        Subtitles: English, Japanese
+
+Output:
+    Series.Name - s01e01.mp4
+        Codec: x265
+        Bitrate: ~0.8-1.7 Mbps
+        Resolution: 1280x720
+        Audio: English (2.1), Japanese (2.1)
+        Subtitles: English, Japanese
+```
+
 ```
