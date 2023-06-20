@@ -60,7 +60,7 @@ Tune:
    One of the ffmpeg tune profiles [film, animaton, grain]
 
 Overrides:
-   -bitrate:[mbps]  - Use bitrates instead of CRF. You can only use defined resolutions with this flag.
+   -bitrate  - Use bitrates instead of CRF. You can only use defined resolutions with this flag.
    -constrain  - Force the encoder to use a max bitrate with CRF.
    -skip-beginning:[hh:mm:ss]  - Skip the beginning by specified amount of time.
    -crf:[crf]  - Override the CRF value for the current media.
@@ -71,7 +71,7 @@ Overrides:
 
 Example Input/Output:
 ```
-Command: node redesign.js 
+Command: node redesign.js 720p 2 hevc film -bitrate -constrain -skip-beginning:00:00:30 -crf:20 -validate:./test -trim:00:00:30,00:00:30
 
 Input: 
     Series.Name.S01E01.Episode.Name.mkv
@@ -88,4 +88,32 @@ Output:
         Resolution: 1280x720
         Audio: English (2.1), Japanese (2.1)
         Subtitles: English, Japanese
+```
+
+## start_process.js
+Iterate through directories and start 'redesign.js' as a child process. It will assume that the script is in a subdirectory of unknown name.
+
+```
+Usage: node start_process.js -a [amount] -d [custom directory]
+
+Amount:
+   Amount of children to spawn in parallel.
+
+Custom Directory:
+   Specify a custom directory to check instead of the root.
+```
+```
+Default directory behavior:
+
+[Root]
+   start_process.js
+   [Dir1]
+      File1
+      ...
+      redesign.js
+   [Dir2]
+      File1
+      ...
+      redesign.js
+   ...
 ```
