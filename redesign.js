@@ -51,7 +51,7 @@ let o = {
 	},
 	settings: {
 		working: process.cwd(),
-		validate: process.platform == "linux" ? "/media/T/" : "//127.0.0.1/T/",
+		validate: process.platform == "linux" ? "/media/T/" : "//192.168.1.12/T/",
 		encoders: ["h264", "hevc", "nvenc"],
 		tune_1: ["film", "grain"],
 		tune_2: ["animate", "animation", "anime"],
