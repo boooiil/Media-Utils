@@ -36,7 +36,7 @@
  */
 
 const { spawn, ChildProcessWithoutNullStreams } = require('child_process');
-const { statSync, readdirSync, readFileSync, existsSync } = require('fs');
+const { statSync, readdirSync, existsSync } = require('fs');
 const readline = require('readline').createInterface({ input: process.stdin, output: process.stdout });
 const currentDirectory = process.cwd();
 
