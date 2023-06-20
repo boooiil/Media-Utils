@@ -72,113 +72,121 @@ let debug = false;
 // Iterate through user arguments.
 for (let index = 0; index < process.argv.length; index++) {
 
-    let argument = process.argv[index];
+	let argument = process.argv[index];
 
-    // If the argument is '-a' then the next argument should be the amount of child processes to run.
-    if (argument === '-a') {
+	// If the argument is '-a' then the next argument should be the amount of child processes to run.
+	if (argument === '-a') {
 
-        // '-a' ' '
-        let amount = process.argv[index + 1];
+		// '-a' ' '
+		let amount = process.argv[index + 1];
 
-        // If the amount is undefined, then the user did not specify an amount.
-        if (amount === undefined) {
-            console.error('No amount specified for argument -a');
-            process.exit(1);
-        }
+		// If the amount is undefined, then the user did not specify an amount.
+		if (amount === undefined) {
+			console.error('No amount specified for argument -a');
+			process.exit(1);
+		}
 
-        // If the amount is not a number, then the user specified an amount that is not a number.
-        if (isNaN(amount)) {
-            console.error('Amount specified for argument -a is not a number');
-            process.exit(1);
-        }
+		// If the amount is not a number, then the user specified an amount that is not a number.
+		if (isNaN(amount)) {
+			console.error('Amount specified for argument -a is not a number');
+			process.exit(1);
+		}
 
-        // If the amount is less than 1, then the user specified an amount that is less than 1.
-        if (amount < 1) {
-            console.error('Amount specified for argument -a is less than 1');
-            process.exit(1);
-        }
+		// If the amount is less than 1, then the user specified an amount that is less than 1.
+		if (amount < 1) {
+			console.error('Amount specified for argument -a is less than 1');
+			process.exit(1);
+		}
 
-        internal.amount = parseInt(amount);
-        index++;
-        continue;
+		internal.amount = parseInt(amount);
+		index++;
+		continue;
 
-    }
+	}
 
-    // If the argument is '-d', then the next argument should be the directory to start in.
-    if (argument === '-d') {
+	// If the argument is '-d', then the next argument should be the directory to start in.
+	if (argument === '-d') {
 
-        let directory = process.argv[index + 1];
+		let directory = process.argv[index + 1];
 
-        // If the directory is undefined, then the user did not specify a directory.
-        if (directory === undefined) {
-            console.error('No directory specified for argument -d');
-            process.exit(1);
-        }
+		// If the directory is undefined, then the user did not specify a directory.
+		if (directory === undefined) {
+			console.error('No directory specified for argument -d');
+			process.exit(1);
+		}
 
-        // If the directory does not exist, then the user specified a directory that does not exist.
-        if (!existsSync(directory)) {
-            console.error('Directory specified for argument -d does not exist');
-            process.exit(1);
-        }
+		// If the directory does not exist, then the user specified a directory that does not exist.
+		if (!existsSync(directory)) {
+			console.error('Directory specified for argument -d does not exist');
+			process.exit(1);
+		}
 
-        index++;
-        continue;
+		index++;
+		continue;
 
-    }
+	}
 
-    // Enable debug mode.
-    if (argument == 'debug') { debug = true }
+	// Enable debug mode.
+	if (argument == 'debug') { debug = true }
 
 }
 
 
 async function main() {
 
-    // Get all directories in the current directory.
-    let directories = readdirSync(currentDirectory).filter(file => statSync(file).isDirectory());
+	// Get all directories in the current directory.
+	let directories = readdirSync(currentDirectory).filter(file => statSync(file).isDirectory());
 
-    // Iterate through directories.
-    for (let directory of directories) {
+	// Iterate through directories.
+	for (let directory of directories) {
 
-        if (debug) { console.log('directory', directory) }
+		if (debug) { console.log('directory', directory) }
 
-        // Get all files in the subdirectory.
-        let files = readdirSync(directory).filter(file => !statSync(directory + "/" + file).isDirectory());
+		// Get all files in the subdirectory.
+		let files = readdirSync(directory).filter(file => !statSync(directory + "/" + file).isDirectory());
+		let mp4Warning = files.some(file => file.includes('.mp4'));
 
-        // Iterate through files.
-        for (let file of files) {
+		// Iterate through files.
+		for (let file of files) {
 
-            if (debug) { console.log('file', file) }
+			if (debug) { console.log('file', file) }
 
-            if (file === 'redesign.js') {
+			if (file === 'redesign.js') {
 
-                // This is being lazy, yes yes.
-                // If the user does not want to transcode this directory, then skip it.
-                if (/[N-n]o/.test(await ask(`Would you like to transcode the directory ${directory}: `))) { continue }
+				if (mp4Warning) {
 
-                // Get the arguments from the user.
-                let args = await ask('Enter arguments for this child process: ');
+					console.log(chalk.red("This directory contains MP4 files."))
+					console.log(chalk.red("This directory is either being transcoded, has been transcoded, or is partially transcoded."))
 
-                // Store the directory and arguments in the map.
-                internal.directories.push({
-                    directory: directory,
-                    arguments: args,
-                    generatedCommand: ['./redesign.js'],
-                    status: "Waiting"
-                })
-                
-                args.split(' ').forEach(argument => internal.directories[internal.directories.length - 1].generatedCommand.push(argument));
+				}
 
-            }
+				// This is being lazy, yes yes.
+				// If the user does not want to transcode this directory, then skip it.
+				if (/[N-n]o/.test(await ask(`Would you like to transcode the directory ${directory}: `))) { continue }
 
-        }
+				// Get the arguments from the user.
+				let args = await ask('Enter arguments for this child process: ');
 
-    }
+				// Store the directory and arguments in the map.
+				internal.directories.push({
+					directory: directory,
+					arguments: args,
+					generatedCommand: ['./redesign.js'],
+					status: "Waiting"
+				})
 
-    readline.close();
+				args.split(' ').forEach(argument => internal.directories[internal.directories.length - 1].generatedCommand.push(argument));
 
-    overlook()
-    updateScreen()
+			}
+
+		}
+
+	}
+
+	readline.close();
+
+	overlook()
+	updateScreen()
 
 }
 
@@ -190,19 +198,19 @@ function overlook() {
 		let current_amount = Object.keys(internal.processing).length
 
 		//if (debug) 
-        if (debug) { console.log(current_amount, internal.amount) }
+		if (debug) { console.log(current_amount, internal.amount) }
 
 		if (current_amount < internal.amount) {
 
-            /**
-             * @type {ProcessingReference}
-             */
-            let next = { status: null, childProcess: null, started: null, directoryReference: null };
+			/**
+			 * @type {ProcessingReference}
+			 */
+			let next = { status: null, childProcess: null, started: null, directoryReference: null };
 
-            next.directoryReference = internal.directories.shift()
-            next.status = next.directoryReference ? next.directoryReference.status : null
+			next.directoryReference = internal.directories.shift()
+			next.status = next.directoryReference ? next.directoryReference.status : null
 
-            if (debug) { console.log('next', next) }
+			if (debug) { console.log('next', next) }
 
 			if (!next.status || next.status.includes("Failed") || next.status == "Finished") {
 
@@ -226,9 +234,9 @@ function overlook() {
 			console.error("CURRENT ALLOWED AMOUNT: " + internal.amount)
 			console.error("CURRENT QUEUE:")
 
-            for (_process of internal.processing) {
-                console.error("CURRENT FILE: ", internal.processing[_process].directoryReference.directory)
-            }
+			for (_process of internal.processing) {
+				console.error("CURRENT FILE: ", internal.processing[_process].directoryReference.directory)
+			}
 
 			process.exit()
 
@@ -240,7 +248,7 @@ function overlook() {
 
 			if (!_process.childProcess) {
 
-                if (debug) { console.log('spawnChildProcess', _process) }
+				if (debug) { console.log('spawnChildProcess', _process) }
 
 				if (_process.status.includes("Processing")) { spawnChildProcess(_process) }
 
@@ -248,17 +256,17 @@ function overlook() {
 
 			if (_process.status === "Finished" || _process.status.includes("Failed")) {
 
-                if (debug) { console.log('Finished', _process) }
+				if (debug) { console.log('Finished', _process) }
 
 				_process.directoryReference.ended = new Date().getTime()
 
-                internal.directories.push(_process.directoryReference)
+				internal.directories.push(_process.directoryReference)
 
 				delete internal.processing[_process.directoryReference.directory]
 
 			}
 
-            //else throw new Error('Unknown status: ' + _process.status)
+			//else throw new Error('Unknown status: ' + _process.status)
 
 		})
 
@@ -273,7 +281,7 @@ function updateScreen() {
 	console.log('\x1B[?25l');
 
 	setInterval(() => {
-		
+
 		let output = []
 
 		let ob = chalk.gray("[")
@@ -297,18 +305,18 @@ function updateScreen() {
 
 				let file_name = `${ob + chalk.blue("FILE") + cb} ${chalk.gray(_process.directoryReference.directory.substring(0, 30))}`
 
-                // TODO: Extrapolate ETA from the running process.
+				// TODO: Extrapolate ETA from the running process.
 				//let eta = `${ob + chalk.blue("ETA") + cb} ${chalk.gray(time(Math.ceil((total_frames - completed_frames) / media_fps), 1))}`
 
 				let activity = `${ob + chalk.blue("ACT") + cb} ${chalk.gray(_process.status)}`
 				let started = `${ob + chalk.blue("START") + cb} ${chalk.gray(time(_process.started))}`
 
-                // TODO: Get total files / completed files.
+				// TODO: Get total files / completed files.
 				//let percent = `${ob + chalk.blue("PROG") + cb} ${chalk.gray(Math.ceil((completed_frames / total_frames) * 100) + "%")}`
 
 				//let message = `${file_name} ${activity} ${started} ${percent} ${cq} ${bitrate} ${speed} ${eta} `
 
-                let message = `${file_name} ${activity} ${started} `
+				let message = `${file_name} ${activity} ${started} `
 
 				output.push(message)
 
@@ -328,7 +336,7 @@ function updateScreen() {
 
 				}
 
-				if (directory.status == "Finished" ||directory.status.includes("Failed")) {
+				if (directory.status == "Finished" || directory.status.includes("Failed")) {
 
 					let ended = `${ob + chalk.blue("COMPLETION") + cb} ${chalk.gray(time(directory.ended))}`
 					let elapsed = `${ob + chalk.blue("ELAPSED") + cb} ${chalk.gray(time(directory.ended - directory.started, 1))}`
@@ -357,35 +365,35 @@ function updateScreen() {
  */
 function spawnChildProcess(_process) {
 
-    if (debug) { console.log('childProcess', _process) }
+	if (debug) { console.log('childProcess', _process) }
 
-    _process.childProcess = spawn('node', _process.directoryReference.generatedCommand, { cwd: _process.directoryReference.directory });
+	_process.childProcess = spawn('node', _process.directoryReference.generatedCommand, { cwd: _process.directoryReference.directory });
 
-    _process.childProcess.stdout.on('data', (data) => {
+	_process.childProcess.stdout.on('data', (data) => {
 
-        if (debug) { console.log(`stdout: ${'data:', data}`) }
+		if (debug) { console.log(`stdout: ${'data:', data}`) }
 
-    });
+	});
 
-    _process.childProcess.stderr.on('data', (data) => {
+	_process.childProcess.stderr.on('data', (data) => {
 
-        if (debug) { console.error(`stderr: ${'data:', data}`) }
+		if (debug) { console.error(`stderr: ${'data:', data}`) }
 
-        throw String(data)
+		throw String(data)
 
-        // _process.status = "Failed";
-        // _process.directoryReference.status = "Failed";
+		// _process.status = "Failed";
+		// _process.directoryReference.status = "Failed";
 
-    });
+	});
 
-    _process.childProcess.on('close', (code) => {
+	_process.childProcess.on('close', (code) => {
 
-        if (debug) { console.log(`child process exited with code ${code}`) }
+		if (debug) { console.log(`child process exited with code ${code}`) }
 
-        _process.status = "Finished";
-        _process.directoryReference.status = "Finished";
+		_process.status = "Finished";
+		_process.directoryReference.status = "Finished";
 
-    });
+	});
 
 }
 
@@ -398,18 +406,18 @@ function spawnChildProcess(_process) {
  */
 async function ask(question) {
 
-    // Return a new Promise object.
-    return new Promise((resolve, reject) => {
+	// Return a new Promise object.
+	return new Promise((resolve, reject) => {
 
-        // Ask the user the question and resolve the promise with the user's answer.
-        readline.question(question, (answer) => {
+		// Ask the user the question and resolve the promise with the user's answer.
+		readline.question(question, (answer) => {
 
-            // Resolve the promise with the user's answer.
-            resolve(answer);
+			// Resolve the promise with the user's answer.
+			resolve(answer);
 
-        })
+		})
 
-    })
+	})
 }
 
 /**
@@ -417,25 +425,25 @@ async function ask(question) {
  */
 let chalk = {
 
-    /**
-     * Wraps a string in ANSI escape codes to color it red.
-     * @param {string} string The string to be colored red.
-     * @returns {string} The colored string.
-     */
+	/**
+	 * Wraps a string in ANSI escape codes to color it red.
+	 * @param {string} string The string to be colored red.
+	 * @returns {string} The colored string.
+	 */
 	red: (string) => { return "\x1b[38;2;255;128;128m" + string + "\x1b[0m" },
 
-    /**
-     * Wraps a string in ANSI escape codes to color it blue.
-     * @param {string} string The string to be colored blue.
-     * @returns {string} The colored string.
-     */
+	/**
+	 * Wraps a string in ANSI escape codes to color it blue.
+	 * @param {string} string The string to be colored blue.
+	 * @returns {string} The colored string.
+	 */
 	blue: (string) => { return "\x1b[38;2;77;148;255m" + string + "\x1b[0m" },
 
-    /**
-     * Wraps a string in ANSI escape codes to color it gray.
-     * @param {string} string The string to be colored gray.
-     * @returns {string} The colored string.
-     */
+	/**
+	 * Wraps a string in ANSI escape codes to color it gray.
+	 * @param {string} string The string to be colored gray.
+	 * @returns {string} The colored string.
+	 */
 	gray: (string) => { return "\x1b[38;2;191;191;191m" + string + "\x1b[0m" }
 
 }
@@ -499,47 +507,31 @@ function time(value, type) {
 	}
 }
 
-function help() {
-
-	return console.log(
-
-		`------------- ${chalk.blue("REDESIGN HELP")} -------------\n` +
-		`\n` +
-		`Usage: ${chalk.blue("redesign.js")} [${chalk.blue("resolution")}] [${chalk.blue("amount")}] [${chalk.blue("codec")}] [${chalk.blue("tune")}] [${chalk.blue("overrides")}]\n` +
-		`\n` +
-		`Resolution:\n` +
-		`   One of the pre-configured resolutons [` +
-		`${chalk.blue("2160p")}, ${chalk.blue("1440p")}, ${chalk.blue("1080pn")}, ${chalk.blue("720p")}, ${chalk.blue("480p")}` +
-		`] (must include the p)\n` +
-		`\n` +
-		`   Special Formats:\n` +
-		`      ${chalk.blue("1080pn")} - Netflix cropping (${chalk.blue("2:1")})\n` +
-		`      ${chalk.blue("720pn")}  - Netflix cropping (${chalk.blue("2:1")})\n` +
-		`      ${chalk.blue("1080pm")} - Marvel cropping  (${chalk.blue("64:29")})\n` +
-		`      ${chalk.blue("720pm")}  - Marvel cropping  (${chalk.blue("64:29")})\n` +
-		`      ${chalk.blue("480pc")}  - NTSC cropping    (${chalk.blue("32:27")})\n` +
-		`\n` +
-		`Amount:\n` +
-		`   Amount of media to convert at once.\n` +
-		`\n` +
-		`Codec:\n` +
-		`   One of the pre-configured codecs [${chalk.blue("hevc")}, ${chalk.blue("nvenc")}, ${chalk.blue("h264")}]\n` +
-		`\n` +
-		`Tune:\n` +
-		`   One of the ffmpeg tune profiles [${chalk.blue("film")}, ${chalk.blue("animaton")}, ${chalk.blue("grain")}]\n` +
-		`\n` +
-		`Overrides:` +
-		`\n` +
-		`   ${chalk.blue("-bitrate")}[${chalk.blue("mbps")}]  - Use bitrates instead of CRF. You can only use defined resolutions with this flag.\n` +
-		`   ${chalk.blue("-constrain")}  - Force the encoder to use a max bitrate with CRF.\n` +
-		`   ${chalk.blue("-skip-beginning:")}[${chalk.blue("hh:mm:ss")}]  - Skip the beginning by specified amount of time.\n` +
-		`   ${chalk.blue("-crf:")}[${chalk.blue("crf")}]  - Override the CRF value for the current media.\n` +
-		`   ${chalk.blue("-validate:")}[${chalk.blue("dir")}]  - Override the validation directory\n` +
-		`   ${chalk.blue("-trim:")}[${chalk.blue("hh:mm:ss,hh:mm:ss")}]   - Trim the media.\n` +
-		`   ${chalk.blue("-novalidate:")}  - Skip validation .\n`
-
-	)
-
-}
-
 main()
+
+process.on('SIGINT', () => {
+
+	console.log()
+	console.log(chalk.red("SIGINT -- Exiting..."))
+	console.log(chalk.red("Bringing back the cursor..."))
+	console.log("\x1B[?25h")
+
+})
+
+process.on('SIGTERM', () => {
+
+	console.log()
+	console.log(chalk.red("SIGTERM -- Exiting..."))
+	console.log(chalk.red("Bringing back the cursor..."))
+	console.log("\x1B[?25h")
+
+});
+
+process.on('exit', () => {
+
+	console.log()
+	console.log(chalk.red("Exiting..."))
+	console.log(chalk.red("Bringing back the cursor..."))
+	console.log("\x1B[?25h")
+
+})
